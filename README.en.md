@@ -111,6 +111,24 @@ All of this is **read-only**: not one byte of the Today desktop app's files is m
 
 Disabling or removing the bundle in **Plugins** removes the `today` provider and the Settings page. Your Today account and the desktop app's sign-in state are untouched.
 
+## Disclaimer
+
+**Unofficial tool.** This is an independent, third-party interoperability project. It has no commercial affiliation, official partnership, or technical authorization with Today AI, DeepSeek AI, or any of their affiliates, and is not endorsed by them. All trademarks belong to their respective owners.
+
+**Usage is billed normally.** This tool only translates network protocols and bridges the local credential. It does not bypass, forge, or cache any part of the billing path. Every call it makes is charged to the account of the person using it, at the upstream provider's published rates.
+
+**Terms-of-service risk.** This tool calls undocumented upstream endpoints, and doing so may violate the upstream platform's terms of service. You accept that risk yourself, including any consequence such as account restriction, quota changes, or loss of access. The author is not responsible for those consequences.
+
+**Takedown on request.** The maintainer respects the intellectual property and commercial interests of others. If a rights holder has a reasonable, legitimate objection to this project, please open a [GitHub Issue](https://github.com/kongzhi1212/dsh-today-llm/issues); the code will be amended or removed within 24–48 hours.
+
+## Acknowledgements
+
+Released as open source under the **MIT License**.
+
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai)** — for a modern Agentic host ecosystem. Everything this plugin stands on comes from it: the plugin contract, the LLM adapter interface, the settings-page slots, and the Host web routes.
+- **[dingminhua/dsh-connect-workbuddy](https://github.com/dingminhua/dsh-connect-workbuddy)** — with particular thanks. This project leaned heavily on its practice and experience around DSH plugin conventions, architecture, and open-source engineering.
+- **[xuemei-wintersweet/dsh-today](https://github.com/xuemei-wintersweet/dsh-today)** — an independent take on connecting Today to DSH. This project drew on it for details of the event-stream protocol and for its approach to decrypting the local credential.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). You may use, modify, and redistribute this software, including commercially, provided the copyright and permission notices are retained. It is provided "as is", without warranty of any kind.
