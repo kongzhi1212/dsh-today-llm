@@ -45,16 +45,23 @@ jobs:
           files: |
             dist/*.tgz
             dist/install-windows.bat
-          generate_release_notes: true
           body: |
             ## Install
 
-            **Windows, no command line:** download `install-windows.bat` and the
-            `.tgz` into the same folder, then double-click the `.bat`.
+            **Windows, no command line:** download both files below into the same
+            folder, then double-click `install-windows.bat`. It locates the harness
+            itself and installs into the `desktop` profile.
 
             **Any platform:**
             ```
-            dsh plugin --profile desktop add ./dsh-today-llm-${{ github.ref_name }}.tgz
+            dsh plugin --profile desktop add ./<the .tgz from below>
             ```
 
-            The version in the filename drops the leading `v`; adjust if needed.
+            **Check a broken install:**
+            ```
+            npx dsh-today-llm doctor
+            ```
+
+            Requires the Today desktop app to be signed in on the same machine. Read
+            the "read this first" section of the README before installing: this is not
+            an ordinary API plugin.
