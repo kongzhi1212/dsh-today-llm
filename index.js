@@ -164,51 +164,87 @@ export function apply(ctx, rawConfig) {
   // `ctx.interval` registers its own effect and returns that disposer.
   if (config.refreshModelsMs > 0) ctx.interval(() => { void refresh() }, config.refreshModelsMs)
 
-  // The Settings page renders from this route. It answers plain JSON so the
-  // browser half needs no RPC plumbing, and it stays behind the same launch
-  // cookie every other Host route uses — a request without that cookie is
-  // rejected before this handler runs.
-  ctx.effect(() => ctx.webServer.register({
+  // Three JSON endpoints for the Settings page.
+  //
+  // They are `handler` routes, not `resource` routes: the web server answers a
+  // resource with GET and HEAD only and returns 405 for anything else, which
+  // would make the two POST endpoints unreachable over real HTTP even though
+  // calling the resource directly in a test appears to work.
+  //
+  // Each one passes the host's own admission check first, so an unauthenticated
+  // request is refused exactly as it would be on any other Host route. `admit`
+  // takes the raw request, the same way the /api carrier uses it.
+  const serve = (path, handle) => ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
-    path: STATUS_ROUTE,
-    resource: async request => jsonResponse(await handleStatus(request, adapter, config))
+    path,
+    handler: async (req, res) => {
+      const connection = ctx.get('connection')
+      if (connection !== undefined) {
+        const admission = connection.admit(req)
+        if (admission !== undefined && 'rejection' in admission) {
+          res.writeHead(admission.rejection, { 'content-type': 'text/plain; charset=utf-8' })
+          res.end(admission.rejection === 401 ? 'unauthorized' : 'forbidden')
+          return
+        }
+      }
+      try {
+        const body = req.method === 'POST' ? await readJsonBody(req) : undefined
+        sendJson(res, 200, await handle({ method: req.method, body }))
+      } catch (error) {
+        sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) })
+      }
+    },
   }))
+
+  // The Settings page renders from this route.
+  serve(STATUS_ROUTE, () => statusSnapshot(adapter, config))
 
   // Configuration writes go through the settings service, which owns the
   // profile patch: it validates the candidate against this row's Config schema,
   // preserves every other row and comment, and restarts the plugin so `apply`
   // rebuilds from the stored values.
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'exact',
-    path: CONFIG_ROUTE,
-    resource: async request => jsonResponse(await handleConfigWrites(request, ctx)),
-  }))
-}
-/**
- * Wrap a payload as a JSON response.
- * @param payload - JSON-serializable body.
- * @param status - HTTP status.
- * @returns the response.
- */
-function jsonResponse(payload, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  })
+  serve(CONFIG_ROUTE, request => handleConfigWrites(request, ctx))
+
+  // One optional connectivity test, driven only by an explicit user action on
+  // the diagnostics section. It is a separate route from CONFIG_ROUTE because it
+  // spends a real Today request: keeping the write route free of side effects
+  // makes "did this change my setup" answerable without qualification.
+  serve(PROBE_ROUTE, request => handleProbe(request, adapter))
 }
 
 /**
- * Answer one status read, or reject a write.
- * @param request - the incoming request.
- * @param adapter - the live adapter.
- * @param config - the resolved config.
- * @returns the payload to return.
+ * Read a JSON request body from the raw request stream.
+ *
+ * Bounded, because these routes sit on a server a browser talks to and an
+ * unbounded read would let one request hold memory for as long as it likes.
+ * @param req - the incoming request.
+ * @param limit - maximum accepted bytes.
+ * @returns the parsed body, or undefined for an empty body.
  */
-async function handleStatus(request, adapter, config) {
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return { ok: false, error: `Method ${request.method} is not allowed here.` }
+async function readJsonBody(req, limit = 64 * 1024) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > limit) throw new Error(`Request body exceeds ${limit} bytes.`)
+    chunks.push(chunk)
   }
-  return await statusSnapshot(adapter, config)
+  const text = Buffer.concat(chunks).toString('utf8')
+  return text === '' ? undefined : JSON.parse(text)
+}
+
+/**
+ * Write one JSON response onto the raw server response.
+ * @param res - the server response.
+ * @param status - HTTP status.
+ * @param payload - JSON-serializable body.
+ */
+function sendJson(res, status, payload) {
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  })
+  res.end(JSON.stringify(payload))
 }
 
 /**
@@ -216,7 +252,7 @@ async function handleStatus(request, adapter, config) {
  *
  * Only the fields this page owns are accepted; anything else is refused rather
  * than merged, so a page bug cannot rewrite unrelated configuration.
- * @param request - the incoming request carrying `{ edits }`.
+ * @param request - the parsed request carrying `{ body: { edits, revision } }`.
  * @param ctx - the plugin context, for the settings service and this row's id.
  * @returns a result describing what was written.
  */
@@ -227,13 +263,7 @@ async function handleConfigWrites(request, ctx) {
   const entry = ctx.fiber?.entry
   if (entry === undefined) return { ok: false, error: 'This plugin is not mounted from a profile row.' }
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return { ok: false, error: 'The request body is not JSON.' }
-  }
-  const edits = body?.edits
+  const edits = request.body?.edits
   if (edits === null || typeof edits !== 'object' || Array.isArray(edits)) {
     return { ok: false, error: 'Expected an `edits` object.' }
   }
@@ -242,7 +272,7 @@ async function handleConfigWrites(request, ctx) {
     return { ok: false, error: `These fields are not editable from this page: ${rejected.join(', ')}.` }
   }
   try {
-    await settings.update(entry.id, edits, body?.revision)
+    await settings.update(entry.id, edits, request.body?.revision)
     return { ok: true, written: Object.keys(edits) }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -264,6 +294,25 @@ const WRITABLE_FIELDS = new Set([
 
 /** Path the Settings page posts configuration edits to. */
 export const CONFIG_ROUTE = '/dsh-today-llm/config'
+
+/** Path the diagnostics section posts a single-model connectivity test to. */
+export const PROBE_ROUTE = '/dsh-today-llm/probe'
+
+/**
+ * Answer one connectivity test.
+ *
+ * POST only, because the test is a real request that consumes account quota and
+ * must never be triggered by a stray navigation or a prefetch.
+ * @param request - the parsed request carrying `{ body: { model } }`.
+ * @param adapter - the live adapter.
+ * @returns the probe outcome, or a refusal.
+ */
+async function handleProbe(request, adapter) {
+  if (request.method !== 'POST') return { ok: false, error: 'This route accepts POST only.' }
+  const model = typeof request.body?.model === 'string' ? request.body.model : ''
+  if (model === '') return { ok: false, error: 'Expected a `model` string.' }
+  return await adapter.probe(model)
+}
 
 /**
  * Path the Settings page reads.
@@ -328,9 +377,18 @@ async function statusSnapshot(adapter, config) {
       usage,
       tasks,
       diary,
+      // Diagnostics come from the adapter's own memory, so they are always
+      // available even when every Today call above failed.
+      diagnostics: adapter.diagnostics(),
     }
   } catch (error) {
-    return { ...base, ok: false, account, error: error instanceof Error ? error.message : String(error) }
+    return {
+      ...base,
+      ok: false,
+      account,
+      error: error instanceof Error ? error.message : String(error),
+      diagnostics: adapter.diagnostics(),
+    }
   }
 }
 

@@ -37,6 +37,9 @@ const EFFORT_DEEP = 'deep'
 /** Consecutive socket failures before the adapter stays on polling. */
 const MAX_SOCKET_FAILURES = 3
 
+/** How many turns the diagnostics view keeps. */
+const MAX_TURNS = 20
+
 /** Context window reported for every Today model. */
 const CONTEXT_WINDOW = 200_000
 /** Output cap reported for every Today model. */
@@ -170,6 +173,43 @@ export class TodayAdapter {
     this.socketDeviceId = typeof config.deviceId === 'string' && config.deviceId !== ''
       ? config.deviceId
       : `dsh-${process.platform}-${Math.random().toString(36).slice(2, 10)}`
+    /**
+     * The last few turns, newest last.
+     *
+     * Every failure this plugin can produce — a rejected session, a model the
+     * account cannot use, a socket that silently fell back to polling — is
+     * otherwise invisible: the user sees a generic error or a slow answer and
+     * has nothing to go on. Keeping the recent turns turns that into a readable
+     * list. Bounded so a long session cannot grow it without limit.
+     */
+    this.turns = []
+  }
+
+  /**
+   * Record one finished turn.
+   * @param record - what the turn did; `ok` is inferred from `errorCode`.
+   */
+  record(record) {
+    this.turns.push(Object.freeze({
+      at: new Date().toISOString(),
+      ...record,
+      ok: record.errorCode === undefined,
+    }))
+    if (this.turns.length > MAX_TURNS) this.turns.splice(0, this.turns.length - MAX_TURNS)
+  }
+
+  /**
+   * Read the recorded turns plus the connection facts beside them.
+   * @returns a detached diagnostics view.
+   */
+  diagnostics() {
+    return {
+      turns: this.turns.map(turn => ({ ...turn })),
+      socket: {
+        enabled: this.config.useSocket !== false,
+        failures: this.socketFailures,
+      },
+    }
   }
 
   /**
@@ -291,14 +331,52 @@ export class TodayAdapter {
       }
     })
     this.selection = selection
-    this.catalog = models.map(model => ({
-      provider: 'today',
-      id: model.id,
-      name: model.name,
-      inputModalities: ['text'],
-      ...(model.multiplier === undefined ? {} : { badge: { text: model.multiplier, tone: 'neutral' } }),
-    }))
+    // Deliberately NOT writing `this.catalog` here. The settings page wants the
+    // complete catalog including models the user hid, while `this.catalog` is
+    // the advertised set that `listModels()` keeps filtered and carries
+    // descriptions. Overwriting it from here dropped both facts and made a
+    // hidden model reappear in later lookups.
     return { models, selection }
+  }
+
+  /**
+   * Run one minimal turn against a single model, for the diagnostics page.
+   *
+   * This spends a real Today request, so the caller decides when to call it;
+   * nothing here is invoked on a timer.
+   * @param model - the model to probe.
+   * @param options - cancellation.
+   * @returns the outcome with how long it took and which path carried it.
+   */
+  async probe(model, options = {}) {
+    const client = this.currentClient()
+    const startedAt = Date.now()
+    try {
+      const outcome = await this.modelLock.run(async () => {
+        await this.pinModel(model, client)
+        const conversationId = await client.startTaskConversation('只回复两个字：可用')
+        return await this.awaitTurn(client, conversationId, {
+          signal: options.signal,
+          timeoutMs: Math.min(this.config.timeoutMs, 120_000),
+        })
+      }, this.config.maxConcurrency)
+      return {
+        ok: true,
+        model,
+        ms: Date.now() - startedAt,
+        path: outcome.path,
+        reply: outcome.text.slice(0, 80),
+      }
+    } catch (error) {
+      const failure = toFailure(error)
+      return {
+        ok: false,
+        model,
+        ms: Date.now() - startedAt,
+        errorCode: failure.failure?.code ?? 'UNKNOWN',
+        error: failure.message,
+      }
+    }
   }
 
   /**
@@ -391,7 +469,11 @@ export class TodayAdapter {
       })
       try {
         await stream.connect()
-        return await stream.awaitTurn(conversationId, settings)
+        const text = await stream.awaitTurn(conversationId, settings)
+        // A successful socket turn clears the failure streak: the count exists to
+        // stop retrying a broken channel, not to remember old bad luck.
+        this.socketFailures = 0
+        return { text, path: 'socket' }
       } catch (error) {
         if (options.signal?.aborted === true) throw error
         this.socketFailures += 1
@@ -402,7 +484,7 @@ export class TodayAdapter {
         stream.close()
       }
     }
-    return await client.awaitReply(conversationId, settings)
+    return { text: await client.awaitReply(conversationId, settings), path: this.config.useSocket === false ? 'poll' : 'poll (fallback)' }
   }
 
   /**
@@ -419,22 +501,40 @@ export class TodayAdapter {
     const client = this.currentClient()
     let reply
     let prompt
+    let path = 'unknown'
+    const startedAt = Date.now()
     try {
       prompt = buildPrompt(options, { strict: this.config.strictProtocol !== false })
       // The model selection is account-wide, so the whole pin-and-observe
       // sequence holds the lock; releasing it earlier would let a concurrent
       // turn retarget the model before this conversation finished. The pool
       // starts at one for that reason; raising it is a deliberate trade.
-      reply = await this.modelLock.run(async () => {
+      const outcome = await this.modelLock.run(async () => {
         await this.pinModel(options.model, client)
         const conversationId = await client.startTaskConversation(prompt)
         return await this.awaitTurn(client, conversationId, options)
       }, this.config.maxConcurrency)
+      reply = outcome.text
+      path = outcome.path
     } catch (error) {
-      throw toFailure(error)
+      const failure = toFailure(error)
+      this.record({
+        model: options.model,
+        path,
+        ms: Date.now() - startedAt,
+        errorCode: failure.failure?.code ?? 'UNKNOWN',
+        errorMessage: failure.message,
+      })
+      throw failure
     }
 
     const parsed = parseReply(reply)
+    this.record({
+      model: options.model,
+      path,
+      ms: Date.now() - startedAt,
+      outcome: parsed.kind === 'tool-call' ? 'tool-call' : 'text',
+    })
     const usage = () => (this.config.reportUsage === false ? undefined : estimateUsage(prompt, reply))
     if (parsed.kind === 'tool-call') {
       const callId = `today_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`

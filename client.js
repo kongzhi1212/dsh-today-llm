@@ -20,6 +20,8 @@ const SECTION_ID = 'dsh-today-llm'
 const STATUS_ROUTE = '/dsh-today-llm/status'
 /** Host route accepting configuration edits. */
 const CONFIG_ROUTE = '/dsh-today-llm/config'
+/** Host route running one single-model connectivity test. */
+const PROBE_ROUTE = '/dsh-today-llm/probe'
 
 /** English dictionary. */
 const EN = {
@@ -35,6 +37,7 @@ const EN = {
   'section.tasks': 'Recent tasks',
   'section.diary': 'Latest diary',
   'section.settings': 'Settings',
+  'section.diagnostics': 'Diagnostics',
   'account.identifier': 'Signed in as',
   'account.unknown': 'unknown',
   'account.dataDir': 'Credential directory',
@@ -49,6 +52,8 @@ const EN = {
   'models.empty': 'No models were reported for this account.',
   'models.show': 'Show',
   'models.hide': 'Hidden',
+  'models.useDefault': 'Use default',
+  'models.hideExpensive': 'Hide priced models',
   'models.context': 'Context window',
   'models.contextDefault': 'Default ({tokens})',
   'tasks.empty': 'No background tasks.',
@@ -70,9 +75,21 @@ const EN = {
   'saving': 'Saving\u2026',
   'reset': 'Discard',
   'saved': 'Saved.',
+  'savedRestart': 'The plugin restarts with the new values.',
   'dirty': 'Unsaved changes',
   'error.heading': 'Today could not be read',
+  'diag.socket': 'Event stream',
+  'diag.socketOn': 'enabled ({failures} consecutive failures)',
+  'diag.socketOff': 'disabled, turns use polling',
+  'diag.empty': 'No turns recorded in this run yet.',
+  'diag.probeLabel': 'Test one model:',
+  'diag.probe': 'Test',
+  'diag.probing': 'Testing\u2026',
+  'diag.costHint': 'A test spends one real Today request',
+  'diag.probeOk': '{model} works: {ms}ms over {path}. Reply: {reply}',
+  'diag.probeFail': '{model} failed ({code}): {error}',
   'error.statusRoute': 'The status route answered HTTP {status}.',
+  'error.unauthorized': 'This page is no longer signed in to the host. Reload the URL that dsh web printed.',
   'error.unreadable': 'The status route answered something that is not JSON.',
   'note.heading': 'Things to keep in mind',
   'note.selection': 'The model choice is stored once per Today account, not per conversation. Selecting a model in the composer changes it for the whole account, including the Today app on your other devices.',
@@ -93,6 +110,7 @@ const ZH = {
   'section.tasks': '最近任务',
   'section.diary': '最新日记',
   'section.settings': '设置',
+  'section.diagnostics': '诊断',
   'account.identifier': '当前登录',
   'account.unknown': '未知',
   'account.dataDir': '凭据目录',
@@ -107,6 +125,8 @@ const ZH = {
   'models.empty': '该账号没有返回任何模型。',
   'models.show': '显示',
   'models.hide': '已隐藏',
+  'models.useDefault': '跟随默认',
+  'models.hideExpensive': '隐藏收费模型',
   'models.context': '上下文窗口',
   'models.contextDefault': '默认（{tokens}）',
   'tasks.empty': '没有后台任务。',
@@ -128,9 +148,21 @@ const ZH = {
   'saving': '保存中…',
   'reset': '放弃改动',
   'saved': '已保存。',
+  'savedRestart': '插件会带着新值重启。',
   'dirty': '有未保存的改动',
   'error.heading': '读不到 Today',
+  'diag.socket': '事件流',
+  'diag.socketOn': '已启用（连续失败 {failures} 次）',
+  'diag.socketOff': '已关闭，改走轮询',
+  'diag.empty': '本次运行还没有记录到请求。',
+  'diag.probeLabel': '测试单个模型：',
+  'diag.probe': '测试',
+  'diag.probing': '测试中…',
+  'diag.costHint': '每测一次都会真实消耗一次 Today 请求',
+  'diag.probeOk': '{model} 可用：{ms}ms，走 {path}。回复：{reply}',
+  'diag.probeFail': '{model} 失败（{code}）：{error}',
   'error.statusRoute': '状态接口返回了 HTTP {status}。',
+  'error.unauthorized': '这个页面与宿主之间的登录已失效，请重新打开 dsh web 打印的那个地址。',
   'error.unreadable': '状态接口返回的内容不是 JSON。',
   'note.heading': '需要知道的事',
   'note.selection': '模型选择按 Today 账号保存，而不是按会话。在输入框里选模型就会改动整个账号，你其它设备上的 Today 也会跟着变。',
@@ -183,6 +215,7 @@ async function readStatus(t) {
     credentials: 'same-origin',
     cache: 'no-store',
   })
+  if (response.status === 401) throw new Error(t('error.unauthorized'))
   if (!response.ok) throw new Error(t('error.statusRoute', { status: response.status }))
   try {
     return await response.json()
@@ -209,6 +242,26 @@ async function writeConfig(edits, revision) {
     return await response.json()
   } catch {
     return { ok: false, error: `HTTP ${response.status}` }
+  }
+}
+
+/**
+ * Ask the Host to test one model with a real request.
+ * @param model - the model id to test.
+ * @returns the Host's outcome.
+ */
+async function writeProbe(model) {
+  const response = await fetch(PROBE_ROUTE, {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    cache: 'no-store',
+    body: JSON.stringify({ model }),
+  })
+  try {
+    return await response.json()
+  } catch {
+    return { ok: false, model, errorCode: `HTTP_${response.status}`, error: `HTTP ${response.status}` }
   }
 }
 
@@ -293,6 +346,8 @@ function TodaySettingsPage(props) {
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState(undefined)
   const [saved, setSaved] = React.useState(false)
+  const [probing, setProbing] = React.useState(undefined)
+  const [probeResult, setProbeResult] = React.useState(undefined)
 
   const load = React.useCallback(async () => {
     setState((current) => ({ ...current, phase: current.data === undefined ? 'loading' : 'refreshing' }))
@@ -350,6 +405,25 @@ function TodaySettingsPage(props) {
     setDraft((current) => ({ ...(current ?? toDraft(data?.config)), [key]: value, dirty: true }))
     setSaved(false)
     setSaveError(undefined)
+  }
+
+  /**
+   * Ask the Host to run one real request against a single model.
+   *
+   * This spends account quota, so it runs only from this explicit click and the
+   * section says so before the button.
+   * @param model - the model id to test.
+   */
+  const runProbe = async (model) => {
+    setProbing(model)
+    setProbeResult(undefined)
+    try {
+      setProbeResult(await writeProbe(model))
+    } catch (error) {
+      setProbeResult({ ok: false, model, errorCode: 'CLIENT', error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setProbing(undefined)
+    }
   }
 
   const save = async () => {
@@ -473,7 +547,7 @@ function TodaySettingsPage(props) {
         h('div', {
           style: { ...s.text('var(--dsw-alias-label-secondary)'), fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 },
         }, model.id)),
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto', flexWrap: 'wrap' } },
         h('label', {
           style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
         },
@@ -483,22 +557,72 @@ function TodaySettingsPage(props) {
           onChange: () => { toggleModel(model.id) },
         }),
         hidden ? t('models.hide') : t('models.show')),
+        // An explicit "use the default" checkbox rather than an empty box whose
+        // only hint is placeholder text: leaving a number field blank and
+        // expecting it to mean something is the kind of ambiguity a user reads
+        // as "nothing is set" instead of "inherit".
+        h('label', {
+          style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
+        },
         h('input', {
-          type: 'number',
-          value: contextValue,
-          placeholder: t('models.contextDefault', { tokens: draft?.defaultContextWindow ?? '' }),
-          onChange: (event) => { setModelContext(model.id, event.target.value) },
-          style: s.input,
-          'aria-label': `${t('models.context')} ${model.name}`,
+          type: 'checkbox',
+          checked: entry.contextWindow === undefined,
+          onChange: () => {
+            // Leaving "use default" seeds the field with the current default, so
+            // unticking it opens an editor holding a sensible number rather than
+            // an empty box that would silently mean the same thing.
+            setModelContext(model.id, entry.contextWindow === undefined
+              ? String(draft?.defaultContextWindow ?? 200000)
+              : '')
+          },
         }),
-        h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto', minWidth: 28, textAlign: 'right' } },
+        t('models.useDefault')),
+        entry.contextWindow === undefined
+          ? h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } },
+            t('models.contextDefault', { tokens: draft?.defaultContextWindow ?? '' }))
+          : h('input', {
+            type: 'number',
+            min: 1000,
+            max: 2000000,
+            step: 1000,
+            value: contextValue,
+            onChange: (event) => { setModelContext(model.id, event.target.value) },
+            style: s.input,
+            'aria-label': `${t('models.context')} ${model.name}`,
+          }),
+        h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto', minWidth: 32, textAlign: 'right' } },
           model.multiplier ?? '\u2014')))
     })
+
+  // A quick way to quiet the selector without unchecking models one by one.
+  const hideExpensive = () => {
+    setDraft((current) => {
+      const base = current ?? toDraft(data?.config)
+      const next = { ...(base.models ?? {}) }
+      for (const model of models) {
+        if (model.multiplier === undefined) continue
+        const weight = Number.parseFloat(String(model.multiplier).replace('\u00d7', ''))
+        if (!Number.isFinite(weight) || weight <= 1) continue
+        next[model.id] = { ...(next[model.id] ?? {}), hidden: true }
+      }
+      return { ...base, models: next, dirty: true }
+    })
+    setSaved(false)
+    setSaveError(undefined)
+  }
 
   const modelsCard = h('div', { style: s.card },
     h('div', { style: s.cardHead },
       h('span', { style: s.heading }, t('section.models')),
-      h('span', { style: s.label }, t('models.count', { count: models.length }))),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+        h('span', { style: s.label }, t('models.count', { count: models.length })),
+        models.some(model => model.multiplier !== undefined && model.multiplier !== '1\u00d7')
+          ? h('button', {
+            type: 'button',
+            onClick: hideExpensive,
+            style: { ...s.button(false), padding: '2px 8px', fontSize: 11 },
+          }, t('models.hideExpensive'))
+          : null)),
     ...modelRows)
 
   // ---- tasks ----
@@ -593,8 +717,70 @@ function TodaySettingsPage(props) {
     style: s.button(saving || !dirty),
   }, t('reset')),
   saved ? h('span', { style: { ...s.text('var(--dsw-alias-state-success-primary)'), fontSize: 12 } }, t('saved')) : null,
+  saved ? h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t('savedRestart')) : null,
   dirty && !saved ? h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t('dirty')) : null,
   saveError === undefined ? null : h('span', { style: { ...s.text('var(--dsw-alias-state-error-primary)'), fontSize: 12 } }, saveError))
+
+  // ---- diagnostics ----
+  const diagnostics = data?.diagnostics ?? { turns: [], socket: {} }
+  const turns = Array.isArray(diagnostics.turns) ? diagnostics.turns.slice().reverse() : []
+  const socket = diagnostics.socket ?? {}
+
+  const socketLine = h('div', { style: { ...s.row, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
+    h('span', { style: s.label }, t('diag.socket')),
+    h('span', { style: s.value },
+      socket.enabled === false
+        ? t('diag.socketOff')
+        : t('diag.socketOn', { failures: socket.failures ?? 0 })))
+
+  const turnRows = turns.length === 0
+    ? [h('div', { key: 'none', style: { ...s.row, borderBottom: 'none' } }, h('span', { style: s.label }, t('diag.empty')))]
+    : turns.map((turn, index) => h('div', {
+      key: `${turn.at}-${index}`,
+      style: { ...s.row, alignItems: 'baseline', flexWrap: 'wrap' },
+    },
+    h('div', { style: { minWidth: 0, flex: '1 1 220px' } },
+      h('div', { style: { ...s.text('var(--dsw-alias-label-primary)'), fontSize: 12 } },
+        `${turn.model ?? '?'} · ${turn.path ?? '?'} · ${turn.ms ?? '?'}ms`),
+      turn.errorMessage === undefined
+        ? null
+        : h('div', { style: { ...s.text('var(--dsw-alias-state-error-primary)'), fontSize: 12, wordBreak: 'break-word' } },
+          String(turn.errorMessage).slice(0, 240))),
+    h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto', fontSize: 11, textAlign: 'right' } },
+      turn.ok === true
+        ? (turn.outcome ?? 'ok')
+        : (turn.errorCode ?? 'error'))))
+
+  const probeButton = (model) => h('button', {
+    type: 'button',
+    disabled: probing !== undefined,
+    style: { ...s.button(probing !== undefined), padding: '2px 8px', fontSize: 11 },
+    onClick: () => { runProbe(model) },
+  }, probing === model ? t('diag.probing') : t('diag.probe'))
+
+  const diagCard = h('div', { style: s.card },
+    h('div', { style: s.cardHead },
+      h('span', { style: s.heading }, t('section.diagnostics')),
+      h('span', { style: s.label }, t('diag.costHint'))),
+    socketLine,
+    ...turnRows,
+    h('div', { style: { padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+      h('span', { style: s.label }, t('diag.probeLabel')),
+      ...models.slice(0, 8).map(model => probeButton(model.id))),
+    probeResult === undefined
+      ? null
+      : h('div', { style: { padding: '0 12px 12px' } },
+        h('div', {
+          style: {
+            ...s.text(probeResult.ok === true ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)'),
+            fontSize: 12,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            wordBreak: 'break-word',
+          },
+        },
+        probeResult.ok === true
+          ? t('diag.probeOk', { model: probeResult.model, ms: probeResult.ms, path: probeResult.path, reply: probeResult.reply })
+          : t('diag.probeFail', { model: probeResult.model, code: probeResult.errorCode, error: String(probeResult.error).slice(0, 200) }))))
 
   const notes = h('ul', {
     style: { margin: 0, paddingLeft: 18, color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: 1.7 },
@@ -608,6 +794,7 @@ function TodaySettingsPage(props) {
     usageCard,
     sectionTitle('section.models'), modelsCard,
     sectionTitle('section.settings'), settingsCard, saveBar,
+    sectionTitle('section.diagnostics'), diagCard,
     sectionTitle('section.tasks'), tasksCard,
     sectionTitle('section.diary'), diaryCard,
     sectionTitle('note.heading'), notes)

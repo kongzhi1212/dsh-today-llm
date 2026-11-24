@@ -1,6 +1,6 @@
 {
   "name": "dsh-today-llm",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Use the models of the locally signed-in Today desktop app as a DeepSeek Harness LLM provider.",
   "keywords": [
@@ -52,3 +52,4 @@
     "@deepseek-ai/schemastery": "3.19.0"
   }
 }
+
