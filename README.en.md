@@ -69,7 +69,7 @@ POST /registry/devices -> POST /ws-ticket -> wss://.../ws?ticket=...
   -> device.hello -> chat.message_ready.v2 events -> isFinal closes the turn
 ```
 
-A reply is therefore delivered as soon as Today writes it, which is faster and cheaper than asking every 700 ms. A failed handshake falls back to the HTTP poll, and after three consecutive failures the adapter stops attempting the socket for that run — **a broken socket never costs you the answer**. Turn the "Pushed event stream" setting off to force polling.
+A reply is therefore delivered as soon as Today writes it, which is faster and cheaper than asking every 700 ms. A failed handshake falls back to the HTTP poll; after three consecutive failures the event stream **pauses for five minutes** and then retries on its own, polling in the meantime — **a broken socket never costs you the answer**. The diagnostics section shows which of the three states it is in: enabled, paused (with the remaining seconds), or switched off. Turn the "Pushed event stream" setting off to force polling.
 
 ### New models appear on their own
 
@@ -117,6 +117,8 @@ pnpm check   # per-file syntax check
 ```
 
 The tests cover pure logic only: reply parsing, envelope layout, request headers and failure codes, and the concurrency lock. They **never touch the network or a real credential** — the credential cases redirect the probe path to an empty temporary directory, so a failure message cannot carry your account details.
+
+The Node floor is `>=22.4.0`, not because of new syntax but because `globalThis.WebSocket` only became stable in Node 22.4. Below that the plugin still runs, but the event-stream path silently degrades to polling.
 
 ## Known limits
 

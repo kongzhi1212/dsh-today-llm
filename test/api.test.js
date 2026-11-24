@@ -143,6 +143,35 @@ describe('failure mapping', () => {
     })
     await assert.rejects(client.usage(), (error) => error.code === 'ABORTED')
   })
+
+  it('maps a timed-out token exchange to TIMEOUT, not UNKNOWN', async () => {
+    // The token call is a separate fetch from `request`, so it needs the same
+    // mapping; without it a stalled auth host looks like a protocol bug.
+    const client = new TodayClient({
+      refreshCredential: 's',
+      fetch: async () => {
+        const error = new Error('timed out')
+        error.name = 'TimeoutError'
+        throw error
+      },
+    })
+    await assert.rejects(client.mintAccessToken(), (error) => {
+      assert.equal(error.code, 'TIMEOUT')
+      assert.match(error.message, /timed out/)
+      return true
+    })
+  })
+
+  it('maps an unreachable auth host to TRANSPORT', async () => {
+    const client = new TodayClient({
+      refreshCredential: 's',
+      fetch: async () => { throw new Error('ECONNREFUSED') },
+    })
+    await assert.rejects(client.mintAccessToken(), (error) => {
+      assert.equal(error.code, 'TRANSPORT')
+      return true
+    })
+  })
 })
 
 describe('token handling', () => {

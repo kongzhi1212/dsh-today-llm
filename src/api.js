@@ -213,11 +213,18 @@ export class TodayClient {
    * @throws {TodayApiError} when the session was rejected.
    */
   async mintAccessToken() {
-    const response = await this.fetch(`${this.authBaseUrl}/api/auth/token`, {
-      method: 'GET',
-      signal: this.deadline(undefined),
-      headers: this.headers('auth', { authorization: `Bearer ${this.refreshCredential}` }),
-    })
+    let response
+    try {
+      response = await this.fetch(`${this.authBaseUrl}/api/auth/token`, {
+        method: 'GET',
+        signal: this.deadline(undefined),
+        headers: this.headers('auth', { authorization: `Bearer ${this.refreshCredential}` }),
+      })
+    } catch (error) {
+      // Same mapping as `request`: without it a stalled auth call surfaced as
+      // UNKNOWN, which reads like a protocol bug rather than a slow network.
+      throw transportError(error, '/api/auth/token', 'GET')
+    }
     if (!response.ok) {
       throw new TodayApiError(
         `Today rejected the stored session (HTTP ${response.status}); sign in again in the Today app`,

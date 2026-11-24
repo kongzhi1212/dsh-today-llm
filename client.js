@@ -23,6 +23,18 @@ const CONFIG_ROUTE = '/dsh-today-llm/config'
 /** Host route running one single-model connectivity test. */
 const PROBE_ROUTE = '/dsh-today-llm/probe'
 
+// Page strings live here rather than in `locale/`, and that is deliberate.
+//
+// `locale/*.json` carries the plugin's own metadata — the title and long
+// description the Plugin Manager shows in the plugin list — and is read by the
+// Host. These dictionaries are the strings this page renders. They are separate
+// namespaces, not a duplicate of the same content.
+//
+// They also cannot be moved into the JSON files: the client module table hands
+// the factory a `require` that only resolves platform modules and registered
+// package factories, so loading a sibling JSON file would need the async chunk
+// path — an extra round trip before the settings section can render.
+
 /** English dictionary. */
 const EN = {
   'nav.label': 'Today',
@@ -77,6 +89,9 @@ const EN = {
   'settings.usage': 'Report estimated token usage',
   'settings.region': 'Deployment',
   'settings.regionAuto': 'Detect automatically',
+  'settings.deviceId': 'Device id',
+  'settings.deviceIdHint': 'Blank derives one from this machine and profile. Today registers each device id separately, so changing it adds a device to the account.',
+  'settings.deviceIdDerived': 'derived automatically',
   'save': 'Save',
   'saving': 'Saving\u2026',
   'reset': 'Discard',
@@ -157,6 +172,9 @@ const ZH = {
   'settings.usage': '上报估算的 token 用量',
   'settings.region': '服务部署',
   'settings.regionAuto': '自动探测',
+  'settings.deviceId': '设备标识',
+  'settings.deviceIdHint': '留空则用本机与 profile 派生出稳定值。Today 按这个标识登记设备，改动等于在账号里新增一个设备。',
+  'settings.deviceIdDerived': '自动派生',
   'save': '保存',
   'saving': '保存中…',
   'reset': '放弃改动',
@@ -935,6 +953,33 @@ function TodaySettingsPage(props) {
     style: { ...s.input, width: 'auto', minWidth: 190, cursor: 'pointer' },
   }, ...options.map(option => h('option', { key: option.value, value: option.value }, t(option.labelKey)))))
 
+  /**
+   * A labelled free-text row with an explanatory hint underneath.
+   * @param key - locale key for the label.
+   * @param value - current text.
+   * @param onChange - receives the new text.
+   * @param hintKey - locale key for the hint line.
+   * @param first - whether this is the card's first row.
+   * @returns the row element.
+   */
+  const textRow = (key, value, onChange, hintKey, first) => h('div', {
+    style: { ...s.row, ...(first === true ? s.rowFirst : {}), alignItems: 'flex-start', flexWrap: 'wrap' },
+  },
+  h('label', { style: s.rowLabel, htmlFor: `today-${key}` }, t(key)),
+  h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, minWidth: 0 } },
+    h('input', {
+      id: `today-${key}`,
+      type: 'text',
+      value: value ?? '',
+      onChange: event => onChange(event.target.value),
+      placeholder: t('settings.deviceIdDerived'),
+      spellCheck: false,
+      autoComplete: 'off',
+      style: { ...s.input, width: 230 },
+    }),
+    h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11, textAlign: 'right', maxWidth: 300 } },
+      t(hintKey))))
+
   const settingsRows = [
     // Placed first because it decides which service everything below talks to:
     // the two deployments are separate account systems with separate hosts.
@@ -966,6 +1011,9 @@ function TodaySettingsPage(props) {
     toggleRow('settings.strict', d.strictProtocol === true, checked => setField('strictProtocol', checked)),
     toggleRow('settings.socket', d.useSocket !== false, checked => setField('useSocket', checked)),
     toggleRow('settings.usage', d.reportUsage !== false, checked => setField('reportUsage', checked)),
+    // Last because it is the rarest thing to touch. It sat in the writable set
+    // with no control, so the only way to set it was a hand-edited patch.
+    textRow('settings.deviceId', d.deviceId ?? '', value => setField('deviceId', value), 'settings.deviceIdHint'),
   ]
 
   const dirty = draft?.dirty === true
@@ -1191,6 +1239,7 @@ function toDraft(config) {
     useSocket: source.useSocket,
     reportUsage: source.reportUsage,
     region: source.region,
+    deviceId: source.deviceId,
     models,
     dirty: false,
   }
@@ -1216,6 +1265,7 @@ function editsOf(draft) {
     useSocket: draft.useSocket,
     reportUsage: draft.reportUsage,
     region: draft.region,
+    deviceId: draft.deviceId,
   }
   // Drop keys the page has no value for, so a partial draft cannot write
   // `undefined` into the row and reset a field the user never saw.
@@ -1285,6 +1335,11 @@ window.__ModuleLoader__.load({
 
     return {
       inject: ['slots', 'locale'],
+      // Test seam: the draft helpers must stay in step with the controls the
+      // page renders. A field wired into the UI but forgotten here is invisible
+      // in the browser and only shows up as "saving did nothing", so they are
+      // exposed for `test/client.test.js`. The loader ignores extra keys.
+      __internals: { toDraft, editsOf, pruneModels },
       apply(ctx) {
         const t = translator(ctx)
         const disposers = []
