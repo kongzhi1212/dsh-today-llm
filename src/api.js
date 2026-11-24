@@ -76,6 +76,8 @@ export class TodayClient {
     this.fetch = fetchImpl ?? globalThis.fetch
     this.accessToken = undefined
     this.expiresAt = 0
+    /** Origin the socket layer derives its URL from. */
+    this.apiBaseUrl = API_BASE
   }
 
   /**

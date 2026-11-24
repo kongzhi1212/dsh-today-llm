@@ -49,14 +49,30 @@ Edits are **draft-based**: nothing is written until **Save**. Saving goes throug
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | Turn timeout | 300 s | How long to wait for one Today turn |
-| Poll interval | 700 ms | How often to re-read the conversation while waiting |
+| Poll interval | 700 ms | How often to re-read the conversation when falling back to polling |
 | Catalog refresh | 600 s | How often to re-read the model catalog; `0` disables it |
 | Default context window | 200000 | Used by every model without its own override |
 | Concurrent turns | 1 | See the risk note below |
 | Strict JSON protocol | on | Turning it off gives more natural prose but **breaks tool calls** |
+| Pushed event stream | on | Receive replies over WebSocket; falls back to polling on its own |
 | Report estimated usage | on | Turning it off stops emitting token counts |
 
 Each model row also has a visibility toggle and an optional context-window override.
+
+### How replies arrive
+
+Replies come over Today's pushed channel rather than polling:
+
+```
+POST /registry/devices -> POST /ws-ticket -> wss://.../ws?ticket=...
+  -> device.hello -> chat.message_ready.v2 events -> isFinal closes the turn
+```
+
+A reply is therefore delivered as soon as Today writes it, which is faster and cheaper than asking every 700 ms. A failed handshake falls back to the HTTP poll, and after three consecutive failures the adapter stops attempting the socket for that run — **a broken socket never costs you the answer**. Turn the "Pushed event stream" setting off to force polling.
+
+### New models appear on their own
+
+When Today lists a new model, the plugin notices on its next catalog refresh (ten minutes by default) and emits the harness `llm/models-updated` event, so the model selector reloads **without restarting DSH**. The event fires only when the advertised set actually changed, so a steady catalog does not churn subscribers on every poll.
 
 ### Data routes
 

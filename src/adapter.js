@@ -27,11 +27,15 @@
 import { TodayClient, TodayApiError } from './api.js'
 import { buildPrompt, parseReply } from './protocol.js'
 import { ModelLock } from './model-lock.js'
+import { TodaySocketStream } from './socket.js'
 
 /** Harness reasoning-effort id accepted by every Today model. */
 const EFFORT_NONE = 'none'
 /** Harness reasoning-effort id that asks the agent to think harder. */
 const EFFORT_DEEP = 'deep'
+
+/** Consecutive socket failures before the adapter stays on polling. */
+const MAX_SOCKET_FAILURES = 3
 
 /** Context window reported for every Today model. */
 const CONTEXT_WINDOW = 200_000
@@ -155,6 +159,17 @@ export class TodayAdapter {
     this.selection = undefined
     this.client = undefined
     this.modelLock = new ModelLock()
+    /** Consecutive event-stream failures, used to stop retrying a broken socket. */
+    this.socketFailures = 0
+    /**
+     * A machine id that is stable for this install.
+     *
+     * Today keys device registration on it, so a fresh value every request would
+     * register a new device on every turn.
+     */
+    this.socketDeviceId = typeof config.deviceId === 'string' && config.deviceId !== ''
+      ? config.deviceId
+      : `dsh-${process.platform}-${Math.random().toString(36).slice(2, 10)}`
   }
 
   /**
@@ -351,7 +366,52 @@ export class TodayAdapter {
   }
 
   /**
+   * Wait for one turn's reply, preferring the pushed event stream.
+   *
+   * The WebSocket reports the turn as soon as Today writes it, which is earlier
+   * and cheaper than polling. It is not required for correctness, so any
+   * handshake failure falls back to the HTTP poll rather than failing the call:
+   * a flaky socket must not cost the user their answer.
+   * @param client - the authenticated client.
+   * @param conversationId - conversation to observe.
+   * @param options - the harness request, for cancellation.
+   * @returns the final assistant text.
+   */
+  async awaitTurn(client, conversationId, options) {
+    const settings = {
+      signal: options.signal,
+      timeoutMs: this.config.timeoutMs,
+      pollIntervalMs: this.config.pollIntervalMs,
+    }
+    if (this.config.useSocket !== false) {
+      const stream = new TodaySocketStream({
+        apiBaseUrl: client.apiBaseUrl,
+        accessToken: await client.token(),
+        deviceId: this.socketDeviceId,
+      })
+      try {
+        await stream.connect()
+        return await stream.awaitTurn(conversationId, settings)
+      } catch (error) {
+        if (options.signal?.aborted === true) throw error
+        this.socketFailures += 1
+        // After repeated failures stop paying the handshake cost on every turn.
+        if (this.socketFailures >= MAX_SOCKET_FAILURES) this.config.useSocket = false
+        console.warn(`[dsh-today-llm] event stream unavailable, falling back to polling: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        stream.close()
+      }
+    }
+    return await client.awaitReply(conversationId, settings)
+  }
+
+  /**
    * Run one harness request through the Today agent.
+   *
+   * The reply is collected in full before it is classified, because a tool call
+   * has to be parsed out of the whole text: emitting deltas as they arrive would
+   * put the raw protocol envelope on screen. Deltas are therefore used only to
+   * keep the turn alive, and the final text is yielded once.
    * @param options - the assembled harness request.
    * @returns the chunk stream.
    */
@@ -368,11 +428,7 @@ export class TodayAdapter {
       reply = await this.modelLock.run(async () => {
         await this.pinModel(options.model, client)
         const conversationId = await client.startTaskConversation(prompt)
-        return await client.awaitReply(conversationId, {
-          signal: options.signal,
-          timeoutMs: this.config.timeoutMs,
-          pollIntervalMs: this.config.pollIntervalMs,
-        })
+        return await this.awaitTurn(client, conversationId, options)
       }, this.config.maxConcurrency)
     } catch (error) {
       throw toFailure(error)

@@ -55,6 +55,11 @@ export const Config = z.object({
       'Require the agent to answer with one JSON object so tool calls work. '
       + 'Turn this off for more natural prose, at the cost of tool calls.',
     ),
+  useSocket: z.boolean().default(true)
+    .description(
+      'Receive turns over the pushed event stream instead of polling. '
+      + 'Falls back to polling automatically if the connection cannot be made.',
+    ),
   reportUsage: z.boolean().default(true)
     .description('Report estimated token counts. Today reports none, so these are approximations.'),
   models: z.dict(ModelPreference).default({})
@@ -69,6 +74,7 @@ const CONFIG_DEFAULTS = Object.freeze({
   defaultContextWindow: 200_000,
   maxConcurrency: 1,
   strictProtocol: true,
+  useSocket: true,
   reportUsage: true,
   models: Object.freeze({}),
 })
@@ -100,6 +106,7 @@ function resolveConfig(raw) {
     defaultContextWindow: number('defaultContextWindow', 1_000, 2_000_000),
     maxConcurrency: number('maxConcurrency', 1, 8),
     strictProtocol: flag('strictProtocol'),
+    useSocket: flag('useSocket'),
     reportUsage: flag('reportUsage'),
     models,
   }
@@ -132,16 +139,30 @@ export function apply(ctx, rawConfig) {
 
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER], adapter))
 
-  // A changed catalog must reach the selector without a restart. The first read
-  // also surfaces a missing sign-in in the log rather than on the first prompt.
-  const refresh = () => {
-    adapter.listModels().catch((error) => {
+  // A changed catalog must reach the selector without a restart.
+  //
+  // Re-reading the catalog is not enough on its own: the model selector keeps
+  // its own copy and only reloads when `llm/models-updated(provider)` fires.
+  // Without that emit a model Today adds later stays invisible until DSH
+  // restarts, which is exactly how a newly released model appeared "missing".
+  // The event is emitted whenever the advertised set actually changes, so a
+  // steady catalog does not churn every subscriber on each poll.
+  let advertised = undefined
+  const refresh = async () => {
+    try {
+      const models = await adapter.listModels()
+      const signature = models.map(model => `${model.id}:${model.name}:${model.badge?.text ?? ''}`).join('|')
+      if (signature !== advertised) {
+        advertised = signature
+        ctx.emit('llm/models-updated', PROVIDER)
+      }
+    } catch (error) {
       ctx.logger?.warn?.(`today: model catalog unavailable: ${error instanceof Error ? error.message : String(error)}`)
-    })
+    }
   }
-  refresh()
+  void refresh()
   // `ctx.interval` registers its own effect and returns that disposer.
-  if (config.refreshModelsMs > 0) ctx.interval(refresh, config.refreshModelsMs)
+  if (config.refreshModelsMs > 0) ctx.interval(() => { void refresh() }, config.refreshModelsMs)
 
   // The Settings page renders from this route. It answers plain JSON so the
   // browser half needs no RPC plumbing, and it stays behind the same launch
@@ -163,7 +184,6 @@ export function apply(ctx, rawConfig) {
     resource: async request => jsonResponse(await handleConfigWrites(request, ctx)),
   }))
 }
-
 /**
  * Wrap a payload as a JSON response.
  * @param payload - JSON-serializable body.
@@ -238,6 +258,7 @@ const WRITABLE_FIELDS = new Set([
   'refreshModelsMs',
   'maxConcurrency',
   'strictProtocol',
+  'useSocket',
   'reportUsage',
 ])
 

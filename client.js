@@ -64,6 +64,7 @@ const EN = {
   'settings.concurrency': 'Concurrent turns',
   'settings.concurrencyHint': 'Today stores the model once per account, so more than one can retarget a turn mid-flight.',
   'settings.strict': 'Strict JSON protocol (needed for tool calls)',
+  'settings.socket': 'Receive turns over the pushed event stream',
   'settings.usage': 'Report estimated token usage',
   'save': 'Save',
   'saving': 'Saving\u2026',
@@ -121,6 +122,7 @@ const ZH = {
   'settings.concurrency': '并发请求数',
   'settings.concurrencyHint': 'Today 的模型选择按账号保存，大于 1 时其中一个请求可能被改到别的模型上。',
   'settings.strict': '严格 JSON 协议（工具调用需要）',
+  'settings.socket': '用推送的事件流接收回复',
   'settings.usage': '上报估算的 token 用量',
   'save': '保存',
   'saving': '保存中…',
@@ -575,6 +577,7 @@ function TodaySettingsPage(props) {
       setField('maxConcurrency', Number.isFinite(n) ? Math.min(8, Math.max(1, Math.round(n))) : 1)
     }),
     toggleField('settings.strict', d.strictProtocol, checked => setField('strictProtocol', checked), undefined),
+    toggleField('settings.socket', d.useSocket, checked => setField('useSocket', checked), undefined),
     toggleField('settings.usage', d.reportUsage, checked => setField('reportUsage', checked), undefined))
 
   const dirty = draft?.dirty === true
@@ -634,6 +637,7 @@ function toDraft(config) {
     defaultContextWindow: source.defaultContextWindow,
     maxConcurrency: source.maxConcurrency,
     strictProtocol: source.strictProtocol,
+    useSocket: source.useSocket,
     reportUsage: source.reportUsage,
     models,
     dirty: false,
@@ -657,6 +661,7 @@ function editsOf(draft) {
     refreshModelsMs: draft.refreshModelsMs,
     maxConcurrency: draft.maxConcurrency,
     strictProtocol: draft.strictProtocol,
+    useSocket: draft.useSocket,
     reportUsage: draft.reportUsage,
   }
   // Drop keys the page has no value for, so a partial draft cannot write
