@@ -80,7 +80,8 @@ const EN = {
   'error.heading': 'Today could not be read',
   'diag.socket': 'Event stream',
   'diag.socketOn': 'enabled ({failures} consecutive failures)',
-  'diag.socketOff': 'disabled, turns use polling',
+  'diag.socketOff': 'disabled by you, turns use polling',
+  'diag.socketPaused': 'paused after repeated failures, retrying in {seconds}s',
   'diag.empty': 'No turns recorded in this run yet.',
   'diag.probeLabel': 'Test one model:',
   'diag.probe': 'Test',
@@ -153,7 +154,8 @@ const ZH = {
   'error.heading': '读不到 Today',
   'diag.socket': '事件流',
   'diag.socketOn': '已启用（连续失败 {failures} 次）',
-  'diag.socketOff': '已关闭，改走轮询',
+  'diag.socketOff': '你已关闭，改走轮询',
+  'diag.socketPaused': '连续失败后已暂停，{seconds} 秒后重试',
   'diag.empty': '本次运行还没有记录到请求。',
   'diag.probeLabel': '测试单个模型：',
   'diag.probe': '测试',
@@ -965,18 +967,29 @@ function TodaySettingsPage(props) {
   const turns = Array.isArray(diagnostics.turns) ? diagnostics.turns.slice().reverse() : []
   const socket = diagnostics.socket ?? {}
 
-  const socketRow = h('div', { style: { ...s.row, ...s.rowFirst } },
-    h('span', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-      h('span', {
-        style: s.dot(socket.enabled === false
-          ? 'var(--dsw-alias-state-warn-primary)'
-          : (socket.failures ?? 0) > 0 ? 'var(--dsw-alias-state-warn-primary)' : 'var(--dsw-alias-state-success-primary)'),
-      }),
+  // Three distinct states, not two: the user switched it off, a cooldown is
+  // still running after repeated transport failures, or it is healthy. Reporting
+  // the cooldown as "disabled" read as though the user had turned it off.
+  const socketText = data?.config?.useSocket === false
+    ? t('diag.socketOff')
+    : socket.paused === true
+      ? t('diag.socketPaused', { seconds: Math.ceil((socket.retryInMs ?? 0) / 1000) })
+      : t('diag.socketOn', { failures: socket.failures ?? 0 })
+  const socketTone = data?.config?.useSocket === false
+    ? 'var(--dsw-alias-state-idle-primary)'
+    : socket.paused === true || (socket.failures ?? 0) > 0
+      ? 'var(--dsw-alias-state-warn-primary)'
+      : 'var(--dsw-alias-state-success-primary)'
+
+  const socketRow = h('div', { style: { ...s.row, ...s.rowFirst, alignItems: 'flex-start' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+      h('span', { style: s.dot(socketTone) }),
       h('span', { style: s.rowLabel }, t('diag.socket'))),
-    h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } },
-      socket.enabled === false
-        ? t('diag.socketOff')
-        : t('diag.socketOn', { failures: socket.failures ?? 0 })))
+    h('div', { style: { textAlign: 'right', minWidth: 0 } },
+      h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, socketText),
+      socket.deviceId === undefined
+        ? null
+        : h('div', { style: { ...s.mono, fontSize: 10.5, opacity: 0.7, marginTop: 2 } }, socket.deviceId)))
 
   const turnRows = turns.length === 0
     ? [h('div', { key: 'none', style: s.empty }, t('diag.empty'))]

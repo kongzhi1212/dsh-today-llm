@@ -24,6 +24,8 @@
  * @module dsh-today-llm/adapter
  */
 
+import { createHash } from 'node:crypto'
+import { hostname, userInfo } from 'node:os'
 import { TodayClient, TodayApiError } from './api.js'
 import { buildPrompt, parseReply } from './protocol.js'
 import { ModelLock } from './model-lock.js'
@@ -34,11 +36,49 @@ const EFFORT_NONE = 'none'
 /** Harness reasoning-effort id that asks the agent to think harder. */
 const EFFORT_DEEP = 'deep'
 
-/** Consecutive socket failures before the adapter stays on polling. */
+/** Consecutive socket failures before the event stream pauses. */
 const MAX_SOCKET_FAILURES = 3
+
+/** How long the event stream stays paused before it is retried. */
+const SOCKET_COOLDOWN_MS = 5 * 60_000
 
 /** How many turns the diagnostics view keeps. */
 const MAX_TURNS = 20
+
+/**
+ * Derive a machine-stable device id.
+ *
+ * Today registers a device per `clientMachineId`, so a random value would add a
+ * new device to the account on every restart. This hashes what identifies the
+ * install — host, user and profile — into the UUID shape the service expects, so
+ * the same install keeps one identity and two profiles stay distinct.
+ * @param profile - the Harness profile name, when the runtime exposes one.
+ * @returns a stable UUID-shaped string.
+ */
+function deriveDeviceId(profile) {
+  let user = 'unknown'
+  try {
+    user = userInfo().username
+  } catch {
+    // A container without a user database still gets a stable id.
+  }
+  let host = 'unknown'
+  try {
+    host = hostname()
+  } catch {
+    // Same fallback as above.
+  }
+  const digest = createHash('sha256')
+    .update(['dsh-today-llm', process.platform, host, user, profile ?? ''].join('\u0000'))
+    .digest()
+  // Shape the first 16 bytes as a version-4-looking UUID; the version nibble is
+  // marked as derived (v5-style) rather than random so it is self-describing.
+  const bytes = Buffer.from(digest.subarray(0, 16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 
 /** Context window reported for every Today model. */
 const CONTEXT_WINDOW = 200_000
@@ -162,17 +202,28 @@ export class TodayAdapter {
     this.selection = undefined
     this.client = undefined
     this.modelLock = new ModelLock()
-    /** Consecutive event-stream failures, used to stop retrying a broken socket. */
+    /** Consecutive event-stream failures, used to pause a broken channel. */
     this.socketFailures = 0
+    /**
+     * When the paused event stream may be retried.
+     *
+     * Kept beside the config rather than written into it: a transport failure is
+     * not a user preference, and mutating `config.useSocket` made the settings
+     * page report a switch the user never touched, with no way back short of a
+     * restart. A cooldown retries on its own once the channel may have recovered.
+     */
+    this.socketDisabledUntil = 0
     /**
      * A machine id that is stable for this install.
      *
-     * Today keys device registration on it, so a fresh value every request would
-     * register a new device on every turn.
+     * Today keys device registration on it. A random value — what this used to
+     * be — registered a new device on every DSH restart, which piles up in the
+     * account's device list. The configured value wins when present, so a user
+     * who needs a fixed id can set one.
      */
-    this.socketDeviceId = typeof config.deviceId === 'string' && config.deviceId !== ''
-      ? config.deviceId
-      : `dsh-${process.platform}-${Math.random().toString(36).slice(2, 10)}`
+    this.socketDeviceId = typeof config.deviceId === 'string' && config.deviceId.trim() !== ''
+      ? config.deviceId.trim()
+      : deriveDeviceId(process.env.DSH_PROFILE)
     /**
      * The last few turns, newest last.
      *
@@ -199,15 +250,31 @@ export class TodayAdapter {
   }
 
   /**
+   * Whether the event stream may be used right now.
+   *
+   * Two independent reasons can stop it: the user switched it off, or a cooldown
+   * is still running after repeated transport failures.
+   * @returns whether a turn should try the socket.
+   */
+  socketAllowed() {
+    if (this.config.useSocket === false) return false
+    return Date.now() >= this.socketDisabledUntil
+  }
+
+  /**
    * Read the recorded turns plus the connection facts beside them.
    * @returns a detached diagnostics view.
    */
   diagnostics() {
+    const paused = this.config.useSocket !== false && Date.now() < this.socketDisabledUntil
     return {
       turns: this.turns.map(turn => ({ ...turn })),
       socket: {
-        enabled: this.config.useSocket !== false,
+        enabled: this.socketAllowed(),
         failures: this.socketFailures,
+        paused,
+        retryInMs: paused ? Math.max(0, this.socketDisabledUntil - Date.now()) : 0,
+        deviceId: this.socketDeviceId,
       },
     }
   }
@@ -461,7 +528,7 @@ export class TodayAdapter {
       timeoutMs: this.config.timeoutMs,
       pollIntervalMs: this.config.pollIntervalMs,
     }
-    if (this.config.useSocket !== false) {
+    if (this.socketAllowed()) {
       const stream = new TodaySocketStream({
         apiBaseUrl: client.apiBaseUrl,
         accessToken: await client.token(),
@@ -471,20 +538,29 @@ export class TodayAdapter {
         await stream.connect()
         const text = await stream.awaitTurn(conversationId, settings)
         // A successful socket turn clears the failure streak: the count exists to
-        // stop retrying a broken channel, not to remember old bad luck.
+        // pause a broken channel, not to remember old bad luck.
         this.socketFailures = 0
+        this.socketDisabledUntil = 0
         return { text, path: 'socket' }
       } catch (error) {
         if (options.signal?.aborted === true) throw error
         this.socketFailures += 1
-        // After repeated failures stop paying the handshake cost on every turn.
-        if (this.socketFailures >= MAX_SOCKET_FAILURES) this.config.useSocket = false
+        // After repeated failures the channel is paused rather than abandoned:
+        // mutating the user's config made the settings page show a switch they
+        // never touched, and nothing ever retried. A cooldown retries on its own.
+        if (this.socketFailures >= MAX_SOCKET_FAILURES) {
+          this.socketDisabledUntil = Date.now() + SOCKET_COOLDOWN_MS
+          this.socketFailures = 0
+        }
         console.warn(`[dsh-today-llm] event stream unavailable, falling back to polling: ${error instanceof Error ? error.message : String(error)}`)
       } finally {
         stream.close()
       }
     }
-    return { text: await client.awaitReply(conversationId, settings), path: this.config.useSocket === false ? 'poll' : 'poll (fallback)' }
+    const reason = this.config.useSocket === false
+      ? 'poll'
+      : Date.now() < this.socketDisabledUntil ? 'poll (paused)' : 'poll (fallback)'
+    return { text: await client.awaitReply(conversationId, settings), path: reason }
   }
 
   /**

@@ -14,6 +14,8 @@ import { randomUUID } from 'node:crypto'
 export const AUTH_BASE = 'https://auth.todayai.cn'
 /** API host that serves conversations, tasks and the model catalog. */
 export const API_BASE = 'https://api.todayai.cn'
+/** Web origin the API calls belong to, sent as `Origin`. */
+export const APP_ORIGIN = 'https://todayai.cn'
 
 /**
  * Attribution value sent on every request, matching the harness default.
@@ -24,12 +26,49 @@ export const API_BASE = 'https://api.todayai.cn'
  */
 const USER_AGENT = 'deepseek-harness'
 
+/**
+ * Deadline for one HTTP request.
+ *
+ * The status page reads several endpoints at once; without a bound, one stalled
+ * response kept the whole page loading with no way to tell what was wrong.
+ */
+const REQUEST_TIMEOUT_MS = 20_000
+
 /** Refresh an access token this many milliseconds before it would expire. */
 const TOKEN_REFRESH_MARGIN_MS = 60_000
 /** Poll interval while waiting for the assistant message to finalize. */
 const POLL_INTERVAL_MS = 700
 /** Smallest accepted poll interval, so a bad config cannot spin. */
 const MIN_POLL_INTERVAL_MS = 250
+
+/**
+ * Map a thrown fetch failure onto the plugin's failure vocabulary.
+ *
+ * `AbortSignal.timeout` rejects with a `TimeoutError`, and a caller cancellation
+ * arrives as an `AbortError`; both would otherwise reach the adapter as an
+ * unclassified `UNKNOWN` and lose the distinction between "too slow" and
+ * "cancelled".
+ * @param error - the rejection from fetch.
+ * @param path - the request path, for the message.
+ * @param method - the request method, for the message.
+ * @returns the error to throw.
+ */
+function transportError(error, path, method) {
+  const name = error instanceof Error ? error.name : ''
+  if (name === 'TimeoutError') {
+    return new TodayApiError(
+      `Today ${method} ${path} timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s`,
+      'TIMEOUT',
+    )
+  }
+  if (name === 'AbortError') {
+    return new TodayApiError(`Today ${method} ${path} was cancelled`, 'ABORTED')
+  }
+  return new TodayApiError(
+    `Today ${method} ${path} failed: ${error instanceof Error ? error.message : String(error)}`,
+    'TRANSPORT',
+  )
+}
 
 /**
  * Caller-visible failure with a stable machine code mirroring the LLM failure vocabulary.
@@ -81,12 +120,34 @@ export class TodayClient {
   }
 
   /**
-   * Standard headers for every request.
+   * Standard headers for one request.
+   *
+   * `origin` names the site the call belongs to, so it differs by host: the auth
+   * host owns `/api/auth/*`, while the API host is a different origin and must
+   * not receive the auth origin. Sending one origin for both was wrong for every
+   * API call.
+   * @param target - which origin this request is bound for.
    * @param extra - additional headers to merge.
    * @returns the header record.
    */
-  headers(extra = {}) {
-    return { accept: 'application/json', origin: AUTH_BASE, 'user-agent': USER_AGENT, ...extra }
+  headers(target, extra = {}) {
+    const origin = target === 'api' ? APP_ORIGIN : AUTH_BASE
+    return { accept: 'application/json', origin, 'user-agent': USER_AGENT, ...extra }
+  }
+
+  /**
+   * Build a deadline signal, composed with the caller's cancellation when given.
+   *
+   * Without this a stalled internal endpoint left the settings page loading
+   * forever: the status snapshot fans out to several of them at once, so one
+   * hung request held up all of them.
+   * @param callerSignal - the caller's cancellation, when any.
+   * @returns a signal for one request.
+   */
+  deadline(callerSignal) {
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    if (callerSignal === undefined) return timeout
+    return typeof AbortSignal.any === 'function' ? AbortSignal.any([callerSignal, timeout]) : timeout
   }
 
   /**
@@ -97,7 +158,8 @@ export class TodayClient {
   async mintAccessToken() {
     const response = await this.fetch(`${AUTH_BASE}/api/auth/token`, {
       method: 'GET',
-      headers: this.headers({ authorization: `Bearer ${this.refreshCredential}` }),
+      signal: this.deadline(undefined),
+      headers: this.headers('auth', { authorization: `Bearer ${this.refreshCredential}` }),
     })
     if (!response.ok) {
       throw new TodayApiError(
@@ -136,16 +198,22 @@ export class TodayClient {
    * @returns the parsed JSON body.
    * @throws {TodayApiError} on any non-2xx status.
    */
-  async request(path, { retryOnAuth = true, ...init } = {}) {
+  async request(path, { retryOnAuth = true, signal, ...init } = {}) {
     const token = await this.token()
-    const response = await this.fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers: this.headers({ authorization: `Bearer ${token}`, ...init.headers }),
-    })
+    let response
+    try {
+      response = await this.fetch(`${API_BASE}${path}`, {
+        ...init,
+        signal: this.deadline(signal),
+        headers: this.headers('api', { authorization: `Bearer ${token}`, ...init.headers }),
+      })
+    } catch (error) {
+      throw transportError(error, path, init.method ?? 'GET')
+    }
     if (response.status === 401 && retryOnAuth) {
       // The JWT is short lived and may have been revoked between mint and use.
       this.accessToken = undefined
-      return await this.request(path, { ...init, retryOnAuth: false })
+      return await this.request(path, { ...init, signal, retryOnAuth: false })
     }
     if (!response.ok) {
       const detail = await safeText(response)

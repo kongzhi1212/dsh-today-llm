@@ -62,6 +62,11 @@ export const Config = z.object({
     ),
   reportUsage: z.boolean().default(true)
     .description('Report estimated token counts. Today reports none, so these are approximations.'),
+  deviceId: z.string().default('')
+    .description(
+      'Machine id Today registers this install under. Leave empty to derive a stable one '
+      + 'from this machine and profile; set it only to share an id across installs.',
+    ),
   models: z.dict(ModelPreference).default({})
     .description('Per-model overrides, keyed by model id. Hidden models also leave the selector.'),
 })
@@ -76,6 +81,7 @@ const CONFIG_DEFAULTS = Object.freeze({
   strictProtocol: true,
   useSocket: true,
   reportUsage: true,
+  deviceId: '',
   models: Object.freeze({}),
 })
 
@@ -108,6 +114,9 @@ function resolveConfig(raw) {
     strictProtocol: flag('strictProtocol'),
     useSocket: flag('useSocket'),
     reportUsage: flag('reportUsage'),
+    // Carried through so the adapter can honour a user-chosen id. Without this
+    // the adapter's `config.deviceId` branch was unreachable dead code.
+    deviceId: typeof source.deviceId === 'string' ? source.deviceId : CONFIG_DEFAULTS.deviceId,
     models,
   }
 }
@@ -197,7 +206,7 @@ export function apply(ctx, rawConfig) {
   }))
 
   // The Settings page renders from this route.
-  serve(STATUS_ROUTE, () => statusSnapshot(adapter, config))
+  serve(STATUS_ROUTE, () => statusSnapshot(adapter, config, currentRevision(ctx)))
 
   // Configuration writes go through the settings service, which owns the
   // profile patch: it validates the candidate against this row's Config schema,
@@ -279,6 +288,28 @@ async function handleConfigWrites(request, ctx) {
   }
 }
 
+/**
+ * Read this row's current configuration revision.
+ *
+ * The settings service exposes it through `describe()`, and the page must echo
+ * it back when saving: `update()` treats it as a compare-and-set precondition.
+ * The page previously sent `undefined`, which silently disabled that check, so
+ * two editors could overwrite each other.
+ * @param ctx - the plugin context.
+ * @returns the revision, or undefined when the service cannot report one.
+ */
+function currentRevision(ctx) {
+  const settings = ctx.get('settings')
+  const id = ctx.fiber?.entry?.id
+  if (settings === undefined || id === undefined) return undefined
+  try {
+    const entry = settings.describe({ redactSecrets: true }).find(item => item.ns === id)
+    return typeof entry?.revision === 'number' ? entry.revision : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Fields the settings page may write. */
 const WRITABLE_FIELDS = new Set([
   'models',
@@ -290,6 +321,7 @@ const WRITABLE_FIELDS = new Set([
   'strictProtocol',
   'useSocket',
   'reportUsage',
+  'deviceId',
 ])
 
 /** Path the Settings page posts configuration edits to. */
@@ -335,9 +367,10 @@ export const STATUS_ROUTE = '/dsh-today-llm/status'
  * @param config - the resolved plugin config.
  * @returns a JSON-serializable snapshot.
  */
-async function statusSnapshot(adapter, config) {
+async function statusSnapshot(adapter, config, revision) {
   const base = {
     config,
+    revision,
     fetchedAt: new Date().toISOString(),
   }
   const stored = readStoredAccount()

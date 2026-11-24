@@ -53,9 +53,13 @@ function blockText(block) {
     case 'reasoning':
       return ''
     case 'image':
-      return '[an image was attached; it is not forwarded to this provider]'
+      return '[an image was attached but its bytes were NOT forwarded to you; you cannot see it]'
     case 'file':
-      return `[a file was attached: ${block.attachment?.name ?? 'unnamed'}; read it with your own file access]`
+      // The old wording said "read it with your own file access", which both
+      // invited the agent to use the tools the reply protocol forbids and
+      // implied content it never received. That is how a model ends up
+      // confidently describing a file it never opened.
+      return `[a file named ${block.attachment?.name ?? 'unnamed'} was attached, but its content was NOT forwarded to you; do not claim to know what it says]`
     case 'tool-call':
       return `[assistant requested tool ${block.name} with arguments ${typeof block.arguments === 'string' ? block.arguments : ''}]`
     case 'tool-addition':
