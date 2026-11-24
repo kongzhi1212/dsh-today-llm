@@ -267,66 +267,296 @@ async function writeProbe(model) {
 
 /** Shared layout values. */
 function styles() {
-  const text = color => ({ color, fontSize: 13, lineHeight: 1.6, margin: 0 })
+  const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  const text = color => ({ color, fontSize: 13, lineHeight: 1.65, margin: 0 })
+
+  /**
+   * A pill, used for state and counts.
+   * @param color - token carrying the accent.
+   * @returns the style record.
+   */
+  const pill = (color) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '1px 8px',
+    borderRadius: 999,
+    fontSize: 11,
+    lineHeight: 1.7,
+    fontWeight: 500,
+    color,
+    border: `1px solid ${color}`,
+  })
+
+  /**
+   * A small dot that carries the row's state without competing with the text.
+   * @param color - token carrying the state colour.
+   * @returns the style record.
+   */
+  const dot = (color) => ({
+    width: 7,
+    height: 7,
+    borderRadius: '50%',
+    background: color,
+    flex: '0 0 auto',
+    display: 'inline-block',
+  })
+
   return {
     text,
-    row: {
+    mono: { fontFamily: MONO, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
+    pill,
+    dot,
+
+    // Page furniture -------------------------------------------------------
+    page: { padding: '6px 0 36px', maxWidth: 820 },
+    hero: {
       display: 'flex',
+      alignItems: 'flex-start',
+      gap: 14,
+      marginBottom: 22,
+    },
+    heroTile: {
+      flex: '0 0 auto',
+      width: 40,
+      height: 40,
+      borderRadius: 11,
+      display: 'grid',
+      placeItems: 'center',
+      background: 'var(--dsw-alias-bg-layer-2)',
+      border: '1px solid var(--dsw-alias-border-l1)',
+    },
+    title: {
+      margin: 0,
+      fontSize: 19,
+      fontWeight: 600,
+      letterSpacing: '-0.01em',
+      color: 'var(--dsw-alias-label-primary)',
+    },
+    subtitle: {
+      ...text('var(--dsw-alias-label-secondary)'),
+      fontSize: 12.5,
+      marginTop: 3,
+      maxWidth: 560,
+    },
+
+    // Sections -------------------------------------------------------------
+    section: { marginBottom: 26 },
+    sectionHead: {
+      display: 'flex',
+      alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 16,
-      padding: '10px 12px',
-      borderBottom: '1px solid var(--dsw-alias-border-l1)',
+      gap: 12,
+      marginBottom: 9,
+      minHeight: 22,
     },
-    label: { ...text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto' },
-    value: {
-      ...text('var(--dsw-alias-label-primary)'),
-      textAlign: 'right',
-      wordBreak: 'break-all',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    sectionTitle: {
+      margin: 0,
+      fontSize: 11,
+      fontWeight: 600,
+      letterSpacing: '0.07em',
+      textTransform: 'uppercase',
+      color: 'var(--dsw-alias-label-secondary)',
     },
+    sectionTools: { display: 'flex', alignItems: 'center', gap: 10 },
+
+    // Cards ----------------------------------------------------------------
     card: {
       border: '1px solid var(--dsw-alias-border-l1)',
-      borderRadius: 8,
+      borderRadius: 12,
       overflow: 'hidden',
-      marginBottom: 20,
+      background: 'var(--dsw-alias-bg-layer-1)',
     },
     cardHead: {
       display: 'flex',
+      alignItems: 'center',
       justifyContent: 'space-between',
-      alignItems: 'baseline',
-      gap: 16,
-      padding: '10px 12px',
-      background: 'var(--dsw-alias-bg-layer-2)',
+      gap: 12,
+      padding: '11px 14px',
       borderBottom: '1px solid var(--dsw-alias-border-l1)',
     },
-    heading: {
+    cardTitle: {
+      margin: 0,
       fontSize: 13,
       fontWeight: 600,
       color: 'var(--dsw-alias-label-primary)',
-      margin: 0,
     },
+
+    // Rows -----------------------------------------------------------------
+    row: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 16,
+      padding: '11px 14px',
+      borderTop: '1px solid var(--dsw-alias-border-l1)',
+    },
+    rowFirst: { borderTop: 'none' },
+    rowLabel: { ...text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto' },
+    rowValue: {
+      ...text('var(--dsw-alias-label-primary)'),
+      textAlign: 'right',
+      wordBreak: 'break-all',
+      fontFamily: MONO,
+      fontSize: 12,
+    },
+    empty: {
+      ...text('var(--dsw-alias-label-secondary)'),
+      fontSize: 12.5,
+      padding: '22px 14px',
+      textAlign: 'center',
+    },
+
+    // Controls -------------------------------------------------------------
     input: {
       border: '1px solid var(--dsw-alias-border-l2)',
-      background: 'var(--dsw-alias-bg-layer-1)',
+      background: 'var(--dsw-alias-bg-base)',
       color: 'var(--dsw-alias-label-primary)',
-      borderRadius: 6,
-      padding: '3px 8px',
+      borderRadius: 7,
+      padding: '4px 9px',
       fontSize: 12,
-      width: 96,
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      width: 100,
+      fontFamily: MONO,
+      outline: 'none',
     },
     button: (disabled) => ({
       appearance: 'none',
       border: '1px solid var(--dsw-alias-border-l2)',
-      background: 'var(--dsw-alias-bg-layer-1)',
+      background: 'transparent',
       color: 'var(--dsw-alias-label-primary)',
-      borderRadius: 6,
-      padding: '4px 12px',
+      borderRadius: 7,
+      padding: '4px 11px',
       fontSize: 12,
+      fontWeight: 500,
       cursor: disabled ? 'default' : 'pointer',
-      opacity: disabled ? 0.6 : 1,
+      opacity: disabled ? 0.45 : 1,
+      transition: 'opacity 120ms ease',
+    }),
+    buttonPrimary: (disabled) => ({
+      appearance: 'none',
+      border: '1px solid transparent',
+      background: 'var(--dsw-alias-brand-primary)',
+      color: '#fff',
+      borderRadius: 7,
+      padding: '5px 14px',
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: disabled ? 'default' : 'pointer',
+      opacity: disabled ? 0.45 : 1,
+    }),
+    buttonGhost: (disabled) => ({
+      appearance: 'none',
+      border: '1px solid transparent',
+      background: 'transparent',
+      color: 'var(--dsw-alias-label-secondary)',
+      borderRadius: 7,
+      padding: '3px 8px',
+      fontSize: 11.5,
+      cursor: disabled ? 'default' : 'pointer',
+      opacity: disabled ? 0.45 : 1,
+    }),
+
+    // Layout helpers -------------------------------------------------------
+    cluster: { display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' },
+    fieldLabel: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 7,
+      fontSize: 12.5,
+      color: 'var(--dsw-alias-label-secondary)',
+      cursor: 'pointer',
+      userSelect: 'none',
+    },
+    banner: color => ({
+      border: `1px solid ${color}`,
+      borderRadius: 10,
+      padding: '11px 14px',
+      marginBottom: 20,
+      background: 'var(--dsw-alias-bg-layer-1)',
     }),
   }
+}
+
+/**
+ * The Settings page.
+ * @param props - slot props plus this bundle's own `React`, `t` and `icon`.
+ * @returns the rendered page.
+ */
+/**
+ * A small on/off switch.
+ *
+ * A styled checkbox rather than a new control: the real input stays in the DOM
+ * so keyboard focus, space-to-toggle, and screen-reader labelling keep working,
+ * and only its box is hidden.
+ * @param props - React, checked, onChange, label, id.
+ * @returns the rendered switch.
+ */
+function Toggle(props) {
+  const { React, checked, onChange, label, id } = props
+  const h = React.createElement
+  const track = {
+    position: 'relative',
+    width: 30,
+    height: 17,
+    borderRadius: 999,
+    flex: '0 0 auto',
+    background: checked ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)',
+    transition: 'background 140ms ease',
+  }
+  const thumb = {
+    position: 'absolute',
+    top: 2,
+    left: checked ? 15 : 2,
+    width: 13,
+    height: 13,
+    borderRadius: '50%',
+    background: '#fff',
+    boxShadow: '0 1px 2px rgba(0,0,0,.35)',
+    transition: 'left 140ms ease',
+  }
+  return h('label', {
+    htmlFor: id,
+    style: {
+      position: 'relative',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      cursor: 'pointer',
+      userSelect: 'none',
+    },
+  },
+  h('input', {
+    id,
+    type: 'checkbox',
+    checked,
+    onChange: event => onChange(event.target.checked),
+    style: { position: 'absolute', opacity: 0, width: 1, height: 1, margin: 0 },
+  }),
+  h('span', { style: track }, h('span', { style: thumb })),
+  label === undefined ? null : h('span', { style: { fontSize: 12.5, color: 'var(--dsw-alias-label-secondary)' } }, label))
+}
+
+/**
+ * A horizontal meter, used for the plan's remaining allowance.
+ * @param props - React, percent, tone.
+ * @returns the rendered bar.
+ */
+function Meter(props) {
+  const { React, percent, tone } = props
+  const h = React.createElement
+  const width = Math.max(0, Math.min(100, typeof percent === 'number' ? percent : 0))
+  return h('div', {
+    style: { height: 8, borderRadius: 999, background: 'var(--dsw-alias-bg-layer-2)', overflow: 'hidden' },
+  },
+  h('div', {
+    style: {
+      width: `${width}%`,
+      height: '100%',
+      borderRadius: 999,
+      background: tone,
+      transition: 'width 240ms ease',
+    },
+  }))
 }
 
 /**
@@ -445,159 +675,118 @@ function TodaySettingsPage(props) {
     }
   }
 
-  // ---- header ----
-  const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 } },
-    props.icon,
-    h('div', { style: { minWidth: 0 } },
-      h('h2', { style: { margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } }, t('page.title'))))
+  // ---- building blocks ----
+  const data0 = data
+  const models = Array.isArray(data0?.models) ? data0.models : []
+  const d = draft ?? {}
 
-  const intro = h('p', { style: { ...s.text('var(--dsw-alias-label-secondary)'), marginTop: 8, marginBottom: 16 } }, t('page.intro'))
+  /**
+   * One titled section.
+   * @param titleKey - locale key for the label.
+   * @param tools - optional right-hand controls.
+   * @param children - the section body.
+   * @returns the section element.
+   */
+  const section = (titleKey, tools, ...children) => h('section', { style: s.section },
+    h('div', { style: s.sectionHead },
+      h('h3', { style: s.sectionTitle }, t(titleKey)),
+      tools === undefined ? null : h('div', { style: s.sectionTools }, tools)),
+    ...children)
 
+  /**
+   * A labelled row inside a card.
+   * @param labelKey - locale key for the label.
+   * @param value - the right-hand content.
+   * @param first - whether this is the card's first row.
+   * @returns the row element.
+   */
+  const row = (labelKey, value, first) => h('div', {
+    style: { ...s.row, ...(first === true ? s.rowFirst : {}) },
+  },
+  h('span', { style: s.rowLabel }, t(labelKey)),
+  h('span', { style: s.rowValue }, value))
+
+  // ---- hero ----
+  const identifier = data0?.account?.identifier
+  const hero = h('header', { style: s.hero },
+    h('div', { style: s.heroTile }, props.icon),
+    h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+      h('h2', { style: s.title }, t('page.title')),
+      h('p', { style: s.subtitle }, t('page.intro'))),
+    h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flex: '0 0 auto' } },
+      identifier === undefined
+        ? null
+        : h('span', { style: { ...s.pill('var(--dsw-alias-border-l2)'), color: 'var(--dsw-alias-label-secondary)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' } }, identifier),
+      h('button', {
+        type: 'button',
+        onClick: () => { load() },
+        disabled: busy,
+        style: s.button(busy),
+      }, busy ? t('status.refreshing') : t('status.refresh'))))
+
+  const fetchedAt = data0?.fetchedAt === undefined
+    ? null
+    : h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11, textAlign: 'right', marginBottom: 18 } },
+      t('status.fetchedAt', { time: new Date(data0.fetchedAt).toLocaleString() }))
+
+  // ---- failure banner ----
   const errorBox = failing && failureMessage !== undefined
-    ? h('div', {
-      style: { border: '1px solid var(--dsw-alias-state-error-primary)', borderRadius: 8, padding: '10px 12px', marginBottom: 16 },
-    },
-    h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-state-error-primary)', marginBottom: 4 } }, t('error.heading')),
-    h('div', { style: s.text('var(--dsw-alias-label-secondary)') }, String(failureMessage)))
+    ? h('div', { style: s.banner('var(--dsw-alias-state-error-primary)') },
+      h('div', {
+        style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 },
+      },
+      h('span', { style: s.dot('var(--dsw-alias-state-error-primary)') }),
+      h('span', { style: { fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-state-error-primary)' } }, t('error.heading'))),
+      h('div', { style: s.text('var(--dsw-alias-label-secondary)') }, String(failureMessage)))
     : null
-
-  const fetchedAt = data?.fetchedAt !== undefined
-    ? h('span', { style: s.text('var(--dsw-alias-label-secondary)') },
-      t('status.fetchedAt', { time: new Date(data.fetchedAt).toLocaleString() }))
-    : null
-
-  const toolbar = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 } },
-    fetchedAt,
-    h('button', { type: 'button', onClick: () => { load() }, disabled: busy, style: s.button(busy) },
-      busy ? t('status.refreshing') : t('status.refresh')))
-
-  const sectionTitle = key => h('h3', { style: { ...s.heading, margin: '0 0 8px' } }, t(key))
 
   // ---- account ----
-  const account = data?.account
   const accountCard = h('div', { style: s.card },
-    h('div', { style: { ...s.row, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
-      h('span', { style: s.label }, t('account.identifier')),
-      h('span', { style: s.value }, account?.identifier ?? t('account.unknown'))),
-    h('div', { style: { ...s.row, borderBottom: 'none' } },
-      h('span', { style: s.label }, t('account.dataDir')),
-      h('span', { style: s.value }, account?.dataDir ?? '\u2014')))
+    row('account.identifier', data0?.account?.identifier ?? t('account.unknown'), true),
+    row('account.dataDir', data0?.account?.dataDir ?? '\u2014'))
 
   // ---- usage ----
-  const usage = data?.usage
-  const usageRows = []
-  if (usage?.error !== undefined) {
-    usageRows.push(h('div', { key: 'err', style: { ...s.row, borderBottom: 'none' } },
-      h('span', { style: s.label }, t('usage.unavailable'))))
-  } else if (usage?.value !== undefined) {
-    const u = usage.value
-    if (u.plan !== undefined) {
-      usageRows.push(h('div', { key: 'plan', style: s.row },
-        h('span', { style: s.label }, t('usage.plan')),
-        h('span', { style: s.value }, u.plan)))
-    }
-    if (u.remainingText !== undefined || u.usedPercent !== undefined) {
-      usageRows.push(h('div', { key: 'left', style: s.row },
-        h('span', { style: s.label }, t('usage.remaining')),
-        h('span', { style: s.value }, u.remainingText ?? t('usage.used', { percent: `${u.usedPercent}%` }))))
-    }
-    if (u.resetAt !== undefined) {
-      usageRows.push(h('div', { key: 'reset', style: s.row },
-        h('span', { style: s.label }, t('usage.resetAt')),
-        h('span', { style: s.value }, new Date(u.resetAt).toLocaleString())))
-    }
-    if (u.serviceState !== undefined) {
-      usageRows.push(h('div', { key: 'svc', style: { ...s.row, borderBottom: 'none' } },
-        h('span', { style: s.label }, t('usage.serviceState')),
-        h('span', { style: s.value }, u.serviceState)))
-    }
-  }
-  const usageCard = usageRows.length === 0 ? null : h('div', { style: s.card },
-    h('div', { style: s.cardHead },
-      h('span', { style: s.heading }, t('section.usage'))),
-    ...usageRows)
-
-  // ---- models (status + edits) ----
-  const models = Array.isArray(data?.models) ? data.models : []
-  const modelRows = models.length === 0
-    ? [h('div', { key: 'empty', style: { ...s.row, borderBottom: 'none' } }, h('span', { style: s.label }, t('models.empty')))]
-    : models.map((model) => {
-      const entry = draft?.models?.[model.id] ?? {}
-      const hidden = entry.hidden === true
-      const contextValue = entry.contextWindow === undefined ? '' : String(entry.contextWindow)
-      return h('div', {
-        key: model.id,
-        style: { ...s.row, alignItems: 'center', flexWrap: 'wrap' },
-      },
-      h('div', { style: { minWidth: 0, flex: '1 1 200px' } },
-        h('div', { style: { ...s.text('var(--dsw-alias-label-primary)'), fontWeight: model.active ? 600 : 400 } },
-          model.name,
-          model.active
-            ? h('span', {
-              style: {
-                marginLeft: 8,
-                fontSize: 11,
-                padding: '1px 6px',
-                borderRadius: 999,
-                color: 'var(--dsw-alias-state-success-primary)',
-                border: '1px solid var(--dsw-alias-state-success-primary)',
-              },
-            }, t('models.current'))
-            : null),
-        h('div', {
-          style: { ...s.text('var(--dsw-alias-label-secondary)'), fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 },
-        }, model.id)),
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto', flexWrap: 'wrap' } },
-        h('label', {
-          style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
-        },
-        h('input', {
-          type: 'checkbox',
-          checked: !hidden,
-          onChange: () => { toggleModel(model.id) },
-        }),
-        hidden ? t('models.hide') : t('models.show')),
-        // An explicit "use the default" checkbox rather than an empty box whose
-        // only hint is placeholder text: leaving a number field blank and
-        // expecting it to mean something is the kind of ambiguity a user reads
-        // as "nothing is set" instead of "inherit".
-        h('label', {
-          style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
-        },
-        h('input', {
-          type: 'checkbox',
-          checked: entry.contextWindow === undefined,
-          onChange: () => {
-            // Leaving "use default" seeds the field with the current default, so
-            // unticking it opens an editor holding a sensible number rather than
-            // an empty box that would silently mean the same thing.
-            setModelContext(model.id, entry.contextWindow === undefined
-              ? String(draft?.defaultContextWindow ?? 200000)
-              : '')
+  const usage = data0?.usage
+  const usageBody = usage?.error !== undefined
+    ? h('div', { style: s.empty }, t('usage.unavailable'))
+    : usage?.value === undefined
+      ? h('div', { style: s.empty }, t('usage.unavailable'))
+      : (() => {
+        const u = usage.value
+        const remaining = typeof u.usedPercent === 'number' ? Math.max(0, 100 - u.usedPercent) : undefined
+        const tone = remaining === undefined
+          ? 'var(--dsw-alias-state-idle-primary)'
+          : remaining <= 15 ? 'var(--dsw-alias-state-error-primary)'
+            : remaining <= 40 ? 'var(--dsw-alias-state-warn-primary)'
+              : 'var(--dsw-alias-state-success-primary)'
+        return h('div', { style: { padding: '14px' } },
+          h('div', {
+            style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 9 },
           },
-        }),
-        t('models.useDefault')),
-        entry.contextWindow === undefined
-          ? h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } },
-            t('models.contextDefault', { tokens: draft?.defaultContextWindow ?? '' }))
-          : h('input', {
-            type: 'number',
-            min: 1000,
-            max: 2000000,
-            step: 1000,
-            value: contextValue,
-            onChange: (event) => { setModelContext(model.id, event.target.value) },
-            style: s.input,
-            'aria-label': `${t('models.context')} ${model.name}`,
-          }),
-        h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto', minWidth: 32, textAlign: 'right' } },
-          model.multiplier ?? '\u2014')))
-    })
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 } },
+            u.plan === undefined
+              ? null
+              : h('span', { style: s.pill('var(--dsw-alias-brand-primary)') }, String(u.plan).toUpperCase()),
+            remaining === undefined ? null : h('span', {
+              style: { ...s.text('var(--dsw-alias-label-primary)'), fontSize: 15, fontWeight: 600 },
+            }, u.remainingText ?? `${remaining}%`),
+            h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t('usage.remaining'))),
+          u.resetAt === undefined ? null : h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11.5 } },
+            `${t('usage.resetAt')} ${new Date(u.resetAt).toLocaleDateString()}`)),
+          remaining === undefined ? null : h(Meter, { React, percent: remaining, tone }),
+          Array.isArray(u.items) && u.items.length > 0
+            ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginTop: 11 } },
+              ...u.items.map(item => h('span', { key: item.key, style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11.5 } },
+                `${item.title} ${item.percentText}`)))
+            : null)
+      })()
 
-  // A quick way to quiet the selector without unchecking models one by one.
+  const usageCard = h('div', { style: s.card }, usageBody)
+
+  // ---- models ----
   const hideExpensive = () => {
     setDraft((current) => {
-      const base = current ?? toDraft(data?.config)
+      const base = current ?? toDraft(data0?.config)
       const next = { ...(base.models ?? {}) }
       for (const model of models) {
         if (model.multiplier === undefined) continue
@@ -611,194 +800,316 @@ function TodaySettingsPage(props) {
     setSaveError(undefined)
   }
 
-  const modelsCard = h('div', { style: s.card },
-    h('div', { style: s.cardHead },
-      h('span', { style: s.heading }, t('section.models')),
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-        h('span', { style: s.label }, t('models.count', { count: models.length })),
-        models.some(model => model.multiplier !== undefined && model.multiplier !== '1\u00d7')
-          ? h('button', {
-            type: 'button',
-            onClick: hideExpensive,
-            style: { ...s.button(false), padding: '2px 8px', fontSize: 11 },
-          }, t('models.hideExpensive'))
-          : null)),
-    ...modelRows)
+  const modelRow = (model, index) => {
+    const entry = draft?.models?.[model.id] ?? {}
+    const hidden = entry.hidden === true
+    const custom = entry.contextWindow !== undefined
+    const stateColor = model.active
+      ? 'var(--dsw-alias-state-success-primary)'
+      : hidden ? 'var(--dsw-alias-state-idle-primary)' : 'var(--dsw-alias-brand-primary)'
 
-  // ---- tasks ----
-  const tasks = data?.tasks
-  const taskRows = tasks?.value !== undefined && Array.isArray(tasks.value) && tasks.value.length > 0
-    ? tasks.value.map(task => h('div', { key: task.id, style: { ...s.row, alignItems: 'center' } },
+    const contextControl = custom
+      ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+        h('input', {
+          type: 'number',
+          min: 1000,
+          max: 2000000,
+          step: 1000,
+          value: String(entry.contextWindow),
+          onChange: (event) => { setModelContext(model.id, event.target.value) },
+          style: { ...s.input, width: 92 },
+          'aria-label': `${t('models.context')} ${model.name}`,
+        }),
+        h('button', {
+          type: 'button',
+          onClick: () => { setModelContext(model.id, '') },
+          title: t('models.useDefault'),
+          'aria-label': t('models.useDefault'),
+          style: s.buttonGhost(false),
+        }, '\u21ba'))
+      : h('button', {
+        type: 'button',
+        onClick: () => { setModelContext(model.id, String(draft?.defaultContextWindow ?? 200000)) },
+        style: { ...s.buttonGhost(false), fontSize: 11, color: 'var(--dsw-alias-label-secondary)' },
+        title: t('models.context'),
+      }, t('models.contextDefault', { tokens: (draft?.defaultContextWindow ?? 200000).toLocaleString() }))
+
+    return h('div', {
+      key: model.id,
+      style: { ...s.row, ...(index === 0 ? s.rowFirst : {}), alignItems: 'center', flexWrap: 'wrap' },
+    },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 220px' } },
+      h('span', { style: s.dot(stateColor) }),
       h('div', { style: { minWidth: 0 } },
-        h('div', { style: { ...s.text('var(--dsw-alias-label-primary)'), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, task.name),
-        h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } },
-          `${task.status}${task.taskType === '' ? '' : ` · ${task.taskType}`}`)),
-      h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto', textAlign: 'right', fontSize: 12 } },
-        task.hasUnseenResult ? t('tasks.unseen') : '')))
-    : [h('div', { key: 'empty', style: { ...s.row, borderBottom: 'none' } },
-      h('span', { style: s.label }, tasks?.error !== undefined ? t('tasks.unavailable') : t('tasks.empty')))]
-  const tasksCard = h('div', { style: s.card },
-    h('div', { style: s.cardHead }, h('span', { style: s.heading }, t('section.tasks'))),
-    ...taskRows)
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' } },
+          h('span', { style: { ...s.text('var(--dsw-alias-label-primary)'), fontSize: 13, fontWeight: model.active ? 600 : 450 } }, model.name),
+          model.active ? h('span', { style: s.pill('var(--dsw-alias-state-success-primary)') }, t('models.current')) : null,
+          hidden ? h('span', {
+            style: { ...s.pill('var(--dsw-alias-border-l2)'), color: 'var(--dsw-alias-label-secondary)' },
+          }, t('models.hide')) : null),
+        h('div', { style: { ...s.mono, fontSize: 11, opacity: 0.85, marginTop: 1 } }, model.id))),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, flex: '0 0 auto' } },
+      contextControl,
+      model.multiplier === undefined
+        ? null
+        : h('span', {
+          style: {
+            ...s.pill('var(--dsw-alias-border-l2)'),
+            color: 'var(--dsw-alias-label-secondary)',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+            minWidth: 34,
+            justifyContent: 'center',
+          },
+        }, model.multiplier),
+      h(Toggle, {
+        React,
+        id: `today-model-${model.id}`,
+        checked: !hidden,
+        onChange: () => { toggleModel(model.id) },
+      })))
+  }
 
-  // ---- diary ----
-  const diary = data?.diary
-  const diaryBody = diary?.error !== undefined
-    ? t('diary.unavailable')
-    : diary?.value === undefined
-      ? t('diary.empty')
-      : `${diary.value.title || diary.value.date}\n\n${diary.value.excerpt}`
-  const diaryCard = h('div', { style: s.card },
-    h('div', { style: s.cardHead },
-      h('span', { style: s.heading }, t('section.diary')),
-      h('span', { style: s.label }, diary?.value?.date ?? '')),
-    h('div', { style: { padding: '10px 12px' } },
-      h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), whiteSpace: 'pre-wrap' } }, diaryBody)))
+  const hasPriced = models.some(model => model.multiplier !== undefined
+    && Number.parseFloat(String(model.multiplier).replace('\u00d7', '')) > 1)
+  const modelsCard = models.length === 0
+    ? h('div', { style: s.card }, h('div', { style: s.empty }, t('models.empty')))
+    : h('div', { style: s.card }, ...models.map(modelRow))
 
   // ---- settings ----
-  const numberField = (key, value, onChange, step) => h('div', { style: { ...s.row, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
-    h('span', { style: s.label }, t(key)),
-    h('input', {
-      type: 'number',
-      step: step ?? 1,
-      value: value === undefined ? '' : String(value),
-      onChange: event => onChange(event.target.value),
-      style: s.input,
-    }))
-
-  const toggleField = (key, value, onChange, hint) => h('div', {
-    style: { ...s.row, borderBottom: '1px solid var(--dsw-alias-border-l1)', flexDirection: 'column', gap: 4 },
+  const numberRow = (key, value, onChange, step, first) => h('div', {
+    style: { ...s.row, ...(first === true ? s.rowFirst : {}) },
   },
-  h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' } },
-    h('input', { type: 'checkbox', checked: value === true, onChange: event => onChange(event.target.checked) }),
-    t(key)),
-  hint === undefined ? null : h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t(hint)))
+  h('label', { style: s.rowLabel, htmlFor: `today-${key}` }, t(key)),
+  h('input', {
+    id: `today-${key}`,
+    type: 'number',
+    step: step ?? 1,
+    value: value === undefined ? '' : String(value),
+    onChange: event => onChange(event.target.value),
+    style: s.input,
+  }))
 
-  const d = draft ?? {}
-  const settingsCard = h('div', { style: s.card },
-    h('div', { style: s.cardHead },
-      h('span', { style: s.heading }, t('section.settings')),
-      h('span', { style: s.label }, t('settings.hint'))),
-    numberField('settings.timeout', d.timeoutMs === undefined ? undefined : Math.round(d.timeoutMs / 1000),
-      (value) => {
-        const n = Number(value)
-        setField('timeoutMs', Number.isFinite(n) && n > 0 ? Math.round(n * 1000) : 300000)
-      }),
-    numberField('settings.poll', d.pollIntervalMs, (value) => {
+  const toggleRow = (key, checked, onChange, first) => h('div', {
+    style: { ...s.row, ...(first === true ? s.rowFirst : {}) },
+  },
+  h('span', { style: { ...s.rowLabel, color: 'var(--dsw-alias-label-primary)' } }, t(key)),
+  h(Toggle, {
+    React,
+    id: `today-${key}`,
+    checked,
+    onChange,
+  }))
+
+  const settingsRows = [
+    numberRow('settings.timeout', d.timeoutMs === undefined ? undefined : Math.round(d.timeoutMs / 1000), (value) => {
+      const n = Number(value)
+      setField('timeoutMs', Number.isFinite(n) && n > 0 ? Math.round(n * 1000) : 300000)
+    }, 10, true),
+    numberRow('settings.poll', d.pollIntervalMs, (value) => {
       const n = Number(value)
       setField('pollIntervalMs', Number.isFinite(n) ? Math.round(n) : 700)
-    }),
-    numberField('settings.refresh', d.refreshModelsMs === undefined ? undefined : Math.round(d.refreshModelsMs / 1000), (value) => {
+    }, 50),
+    numberRow('settings.refresh', d.refreshModelsMs === undefined ? undefined : Math.round(d.refreshModelsMs / 1000), (value) => {
       const n = Number(value)
       setField('refreshModelsMs', Number.isFinite(n) ? Math.max(0, Math.round(n * 1000)) : 600000)
-    }),
-    numberField('settings.context', d.defaultContextWindow, (value) => {
+    }, 60),
+    numberRow('settings.context', d.defaultContextWindow, (value) => {
       const n = Number(value)
       setField('defaultContextWindow', Number.isFinite(n) && n > 0 ? Math.round(n) : 200000)
-    }),
-    numberField('settings.concurrency', d.maxConcurrency, (value) => {
+    }, 1000),
+    numberRow('settings.concurrency', d.maxConcurrency, (value) => {
       const n = Number(value)
       setField('maxConcurrency', Number.isFinite(n) ? Math.min(8, Math.max(1, Math.round(n))) : 1)
     }),
-    toggleField('settings.strict', d.strictProtocol, checked => setField('strictProtocol', checked), undefined),
-    toggleField('settings.socket', d.useSocket, checked => setField('useSocket', checked), undefined),
-    toggleField('settings.usage', d.reportUsage, checked => setField('reportUsage', checked), undefined))
+    toggleRow('settings.strict', d.strictProtocol === true, checked => setField('strictProtocol', checked)),
+    toggleRow('settings.socket', d.useSocket !== false, checked => setField('useSocket', checked)),
+    toggleRow('settings.usage', d.reportUsage !== false, checked => setField('reportUsage', checked)),
+  ]
 
   const dirty = draft?.dirty === true
   const saveBar = h('div', {
-    style: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 20, flexWrap: 'wrap' },
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap',
+      padding: '11px 14px',
+      borderTop: '1px solid var(--dsw-alias-border-l1)',
+      background: 'var(--dsw-alias-bg-layer-2)',
+    },
   },
-  h('button', { type: 'button', onClick: save, disabled: saving || !dirty, style: s.button(saving || !dirty) },
-    saving ? t('saving') : t('save')),
   h('button', {
     type: 'button',
-    onClick: () => { setDraft(toDraft(data?.config)); setSaveError(undefined); setSaved(false) },
+    onClick: save,
+    disabled: saving || !dirty,
+    style: s.buttonPrimary(saving || !dirty),
+  }, saving ? t('saving') : t('save')),
+  h('button', {
+    type: 'button',
+    onClick: () => { setDraft(toDraft(data0?.config)); setSaveError(undefined); setSaved(false) },
     disabled: saving || !dirty,
     style: s.button(saving || !dirty),
   }, t('reset')),
-  saved ? h('span', { style: { ...s.text('var(--dsw-alias-state-success-primary)'), fontSize: 12 } }, t('saved')) : null,
-  saved ? h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t('savedRestart')) : null,
-  dirty && !saved ? h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t('dirty')) : null,
-  saveError === undefined ? null : h('span', { style: { ...s.text('var(--dsw-alias-state-error-primary)'), fontSize: 12 } }, saveError))
+  h('span', { style: { flex: '1 1 auto' } }),
+  saved ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--dsw-alias-state-success-primary)' } },
+    h('span', { style: s.dot('var(--dsw-alias-state-success-primary)') }), t('savedRestart')) : null,
+  saved ? null : dirty ? h('span', { style: { ...s.text('var(--dsw-alias-border-l2)'), fontSize: 11.5, color: 'var(--dsw-alias-label-secondary)' } }, t('dirty')) : null,
+  saveError === undefined ? null : h('span', {
+    style: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--dsw-alias-state-error-primary)' },
+  }, h('span', { style: s.dot('var(--dsw-alias-state-error-primary)') }), saveError))
+
+  const settingsBody = h('div', { style: s.card }, ...settingsRows, saveBar)
 
   // ---- diagnostics ----
-  const diagnostics = data?.diagnostics ?? { turns: [], socket: {} }
+  const diagnostics = data0?.diagnostics ?? { turns: [], socket: {} }
   const turns = Array.isArray(diagnostics.turns) ? diagnostics.turns.slice().reverse() : []
   const socket = diagnostics.socket ?? {}
 
-  const socketLine = h('div', { style: { ...s.row, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
-    h('span', { style: s.label }, t('diag.socket')),
-    h('span', { style: s.value },
+  const socketRow = h('div', { style: { ...s.row, ...s.rowFirst } },
+    h('span', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+      h('span', {
+        style: s.dot(socket.enabled === false
+          ? 'var(--dsw-alias-state-warn-primary)'
+          : (socket.failures ?? 0) > 0 ? 'var(--dsw-alias-state-warn-primary)' : 'var(--dsw-alias-state-success-primary)'),
+      }),
+      h('span', { style: s.rowLabel }, t('diag.socket'))),
+    h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } },
       socket.enabled === false
         ? t('diag.socketOff')
         : t('diag.socketOn', { failures: socket.failures ?? 0 })))
 
   const turnRows = turns.length === 0
-    ? [h('div', { key: 'none', style: { ...s.row, borderBottom: 'none' } }, h('span', { style: s.label }, t('diag.empty')))]
+    ? [h('div', { key: 'none', style: s.empty }, t('diag.empty'))]
     : turns.map((turn, index) => h('div', {
       key: `${turn.at}-${index}`,
-      style: { ...s.row, alignItems: 'baseline', flexWrap: 'wrap' },
+      style: { ...s.row, alignItems: 'flex-start', flexWrap: 'wrap' },
     },
-    h('div', { style: { minWidth: 0, flex: '1 1 220px' } },
-      h('div', { style: { ...s.text('var(--dsw-alias-label-primary)'), fontSize: 12 } },
-        `${turn.model ?? '?'} · ${turn.path ?? '?'} · ${turn.ms ?? '?'}ms`),
-      turn.errorMessage === undefined
-        ? null
-        : h('div', { style: { ...s.text('var(--dsw-alias-state-error-primary)'), fontSize: 12, wordBreak: 'break-word' } },
-          String(turn.errorMessage).slice(0, 240))),
-    h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), flex: '0 0 auto', fontSize: 11, textAlign: 'right' } },
-      turn.ok === true
-        ? (turn.outcome ?? 'ok')
-        : (turn.errorCode ?? 'error'))))
+    h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0, flex: '1 1 260px' } },
+      h('span', {
+        style: { ...s.dot(turn.ok === true ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)'), marginTop: 6 },
+      }),
+      h('div', { style: { minWidth: 0 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          h('span', { style: { ...s.text('var(--dsw-alias-label-primary)'), fontSize: 12.5, fontWeight: 500 } }, turn.model ?? '?'),
+          h('span', { style: s.mono }, `${turn.path ?? '?'}`),
+          h('span', { style: s.mono }, `${turn.ms ?? '?'}ms`)),
+        turn.errorMessage === undefined
+          ? null
+          : h('div', {
+            style: { ...s.text('var(--dsw-alias-state-error-primary)'), fontSize: 11.5, marginTop: 3, wordBreak: 'break-word', opacity: 0.9 },
+          }, String(turn.errorMessage).slice(0, 240)))),
+    h('span', {
+      style: turn.ok === true
+        ? s.pill('var(--dsw-alias-border-l2)')
+        : { ...s.pill('var(--dsw-alias-state-error-primary)'), fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
+      ...(turn.ok === true ? { color: 'var(--dsw-alias-label-secondary)' } : {}),
+    }, turn.ok === true ? String(turn.outcome ?? 'ok') : String(turn.errorCode ?? 'error'))))
 
-  const probeButton = (model) => h('button', {
-    type: 'button',
-    disabled: probing !== undefined,
-    style: { ...s.button(probing !== undefined), padding: '2px 8px', fontSize: 11 },
-    onClick: () => { runProbe(model) },
-  }, probing === model ? t('diag.probing') : t('diag.probe'))
-
-  const diagCard = h('div', { style: s.card },
-    h('div', { style: s.cardHead },
-      h('span', { style: s.heading }, t('section.diagnostics')),
-      h('span', { style: s.label }, t('diag.costHint'))),
-    socketLine,
-    ...turnRows,
-    h('div', { style: { padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
-      h('span', { style: s.label }, t('diag.probeLabel')),
-      ...models.slice(0, 8).map(model => probeButton(model.id))),
-    probeResult === undefined
-      ? null
-      : h('div', { style: { padding: '0 12px 12px' } },
-        h('div', {
-          style: {
-            ...s.text(probeResult.ok === true ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)'),
-            fontSize: 12,
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            wordBreak: 'break-word',
-          },
-        },
-        probeResult.ok === true
-          ? t('diag.probeOk', { model: probeResult.model, ms: probeResult.ms, path: probeResult.path, reply: probeResult.reply })
-          : t('diag.probeFail', { model: probeResult.model, code: probeResult.errorCode, error: String(probeResult.error).slice(0, 200) }))))
-
-  const notes = h('ul', {
-    style: { margin: 0, paddingLeft: 18, color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: 1.7 },
+  const probeRow = h('div', {
+    style: { padding: '12px 14px', borderTop: '1px solid var(--dsw-alias-border-l1)' },
   },
-  h('li', null, t('note.selection')),
-  h('li', null, t('note.tokens')))
+  h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+    h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 12 } }, t('diag.probeLabel')),
+    ...models.slice(0, 8).map(model => h('button', {
+      key: model.id,
+      type: 'button',
+      disabled: probing !== undefined,
+      style: s.button(probing !== undefined),
+      onClick: () => { runProbe(model.id) },
+    }, probing === model.id ? t('diag.probing') : model.name))),
+  h('div', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11, marginTop: 7, opacity: 0.8 } }, t('diag.costHint')),
+  probeResult === undefined
+    ? null
+    : h('div', {
+      style: {
+        marginTop: 10,
+        padding: '9px 11px',
+        borderRadius: 8,
+        background: 'var(--dsw-alias-bg-layer-2)',
+        ...s.text(probeResult.ok === true ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)'),
+        fontSize: 12,
+        wordBreak: 'break-word',
+      },
+    },
+    probeResult.ok === true
+      ? t('diag.probeOk', { model: probeResult.model, ms: probeResult.ms, path: probeResult.path, reply: probeResult.reply })
+      : t('diag.probeFail', { model: probeResult.model, code: probeResult.errorCode, error: String(probeResult.error).slice(0, 200) })))
 
-  return h('div', { style: { padding: '4px 0 24px', maxWidth: 760 } },
-    header, intro, errorBox, toolbar,
-    sectionTitle('section.account'), accountCard,
-    usageCard,
-    sectionTitle('section.models'), modelsCard,
-    sectionTitle('section.settings'), settingsCard, saveBar,
-    sectionTitle('section.diagnostics'), diagCard,
-    sectionTitle('section.tasks'), tasksCard,
-    sectionTitle('section.diary'), diaryCard,
-    sectionTitle('note.heading'), notes)
+  const diagCard = h('div', { style: s.card }, socketRow, ...turnRows, probeRow)
+
+  // ---- tasks ----
+  const tasks = data0?.tasks
+  const taskRows = tasks?.value !== undefined && Array.isArray(tasks.value) && tasks.value.length > 0
+    ? tasks.value.map((task, index) => h('div', {
+      key: task.id,
+      style: { ...s.row, ...(index === 0 ? s.rowFirst : {}), alignItems: 'center' },
+    },
+    h('div', { style: { minWidth: 0 } },
+      h('div', {
+        style: { ...s.text('var(--dsw-alias-label-primary)'), fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+      }, task.name),
+      h('div', { style: { ...s.mono, fontSize: 11, marginTop: 1 } },
+        `${task.status}${task.taskType === '' ? '' : ` · ${task.taskType}`}`)),
+    task.hasUnseenResult
+      ? h('span', { style: s.pill('var(--dsw-alias-brand-primary)') }, t('tasks.unseen'))
+      : null))
+    : [h('div', { key: 'empty', style: s.empty }, tasks?.error !== undefined ? t('tasks.unavailable') : t('tasks.empty'))]
+  const tasksCard = h('div', { style: s.card }, ...taskRows)
+
+  // ---- diary ----
+  const diary = data0?.diary
+  const diaryText = diary?.error !== undefined
+    ? t('diary.unavailable')
+    : diary?.value === undefined
+      ? t('diary.empty')
+      : diary.value.excerpt
+  const diaryCard = h('div', { style: s.card },
+    diary?.value === undefined ? null : h('div', { style: s.cardHead },
+      h('span', { style: s.cardTitle }, diary.value.title || diary.value.date),
+      h('span', { style: { ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11.5 } }, diary.value.date ?? '')),
+    h('div', {
+      style: {
+        padding: '13px 14px',
+        ...s.text('var(--dsw-alias-label-secondary)'),
+        fontSize: 12.5,
+        whiteSpace: 'pre-wrap',
+        maxHeight: 180,
+        overflow: 'auto',
+      },
+    }, diaryText))
+
+  // ---- notes ----
+  const notes = h('div', {
+    style: {
+      border: '1px dashed var(--dsw-alias-border-l1)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+    },
+  },
+  ...['note.selection', 'note.tokens'].map(key => h('div', {
+    key,
+    style: { display: 'flex', gap: 8, ...s.text('var(--dsw-alias-label-secondary)'), fontSize: 11.5 },
+  },
+  h('span', { style: { opacity: 0.6 } }, '\u2022'),
+  h('span', null, t(key)))))
+
+  return h('div', { style: s.page },
+    hero, fetchedAt, errorBox,
+    section('section.account', undefined, accountCard),
+    section('section.usage', undefined, usageCard),
+    section('section.models', hasPriced
+      ? h('button', { type: 'button', onClick: hideExpensive, style: s.buttonGhost(false) }, t('models.hideExpensive'))
+      : undefined, modelsCard),
+    section('section.settings', undefined, settingsBody),
+    section('section.diagnostics', undefined, diagCard),
+    section('section.tasks', undefined, tasksCard),
+    section('section.diary', undefined, diaryCard),
+    notes)
 }
+
 
 /**
  * Turn a config snapshot into page state.
