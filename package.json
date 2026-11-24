@@ -1,14 +1,21 @@
 {
   "name": "dsh-today-llm",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "type": "module",
-  "description": "Use the models of the locally signed-in Today desktop app as a DeepSeek Harness LLM provider.",
+  "description": "Use the locally signed-in Today (Today AI) desktop account as a DeepSeek Harness LLM provider: GLM, Kimi, Qwen, MiniMax and DeepSeek models through one account.",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
     "today",
     "todayai",
-    "model-provider"
+    "model-provider",
+    "glm",
+    "kimi",
+    "qwen",
+    "minimax",
+    "deepseek",
+    "openai-compatible",
+    "llm-proxy"
   ],
   "license": "MIT",
   "author": "kongzhi1212 (https://github.com/kongzhi1212)",

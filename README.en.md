@@ -1,6 +1,6 @@
 # Today models
 
-Connects the account already signed in by the **Today desktop app** to DeepSeek Harness as a model provider named `today`.
+Connects the account already signed in by the **Today desktop app** to DeepSeek Harness as a model provider named `today`. Everything that account can use on Today comes through — **GLM, Kimi, Qwen, MiniMax, DeepSeek** and whatever else the catalog holds — with no extra signup or top-up.
 
 > **This is not an ordinary API plugin. Read this before installing.**
 >
@@ -10,6 +10,22 @@ Connects the account already signed in by the **Today desktop app** to DeepSeek 
 > 4. **It depends on upstream internals.** The plugin reads the desktop app's encrypted credentials and calls its private API. An upstream change can break it.
 >
 > This is an independent interoperability adapter. It is **not affiliated with, authorised by, or endorsed by Today**.
+
+## Which models you get
+
+The selector is driven by **your account's** Today catalog, not a fixed list. These are the ones connected here today:
+
+| Vendor | Model | Usage multiplier |
+| --- | --- | --- |
+| DeepSeek | DeepSeek V4.1 Flash | `1×` |
+| MiniMax | MiniMax M3.1 Flash | `1×` |
+| Zhipu | GLM 5.3 Flash | `1×` |
+| Zhipu | GLM 5.3 | `4×` |
+| Alibaba | Qwen3.8 Max | `5×` |
+| Moonshot | Kimi K3.1 Pro | `8×` |
+| Moonshot | Kimi K3.1 Pro Highspeed | `16×` |
+
+The multiplier is Today's own rate, shown as-is. When the catalog changes the selector follows on its own, so this table is a measured snapshot rather than a ceiling.
 
 ## What it does
 
