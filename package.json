@@ -1,0 +1,54 @@
+{
+  "name": "dsh-today-llm",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Use the models of the locally signed-in Today desktop app as a DeepSeek Harness LLM provider.",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "today",
+    "todayai",
+    "model-provider"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./src/*": "./src/*",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-settings-plugins",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.19.0"
+  }
+}

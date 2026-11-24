@@ -1,0 +1,6 @@
+# Registers the Today provider. The plugin reads the account already signed in
+# by the local Today desktop app, so no separate sign-in flow is started and
+# the profile's default model is left unchanged.
+- insert:
+    - id: dsh-today-llm
+      name: dsh-today-llm

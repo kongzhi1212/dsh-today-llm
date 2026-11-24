@@ -1,0 +1,26 @@
+# Dependencies installed from package.json.
+node_modules/
+
+# pnpm state
+.pnpm-store/
+pnpm-lock.yaml
+.modules.yaml
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch: logs, temp exports, anything hand-made while testing.
+*.log
+tmp/
+scratch/
+.tmp/
+
+# Local overrides that must never be published.
+.env
+.env.*
+*.local.json
