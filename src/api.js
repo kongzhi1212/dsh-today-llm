@@ -128,13 +128,62 @@ export class TodayApiError extends Error {
 }
 
 /**
+ * Read the `Retry-After` hint, in seconds, when the service sends one.
+ * @param response - the failed response.
+ * @returns the hint in seconds, or undefined.
+ */
+function retryAfterOf(response) {
+  const raw = response.headers?.get?.('retry-after')
+  if (raw === null || raw === undefined) return undefined
+  const seconds = Number.parseFloat(raw)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
+  const when = Date.parse(raw)
+  if (!Number.isFinite(when)) return undefined
+  return Math.max(0, Math.ceil((when - Date.now()) / 1000))
+}
+
+/**
+ * Turn a failed status into a message that says what to do about it.
+ *
+ * The raw status and upstream detail are kept, because hiding them makes an
+ * unexpected failure impossible to search for; what is added is a leading
+ * sentence for the cases a user can act on.
+ * @param status - HTTP status.
+ * @param method - request method.
+ * @param path - request path.
+ * @param detail - upstream body, when any.
+ * @param retryAfter - service hint in seconds, when any.
+ * @returns the message.
+ */
+function explainFailure(status, method, path, detail, retryAfter) {
+  const trace = detail === '' ? '' : `: ${detail}`
+  if (status === 429) {
+    const wait = retryAfter === undefined ? '请稍后重试' : `请等待约 ${retryAfter} 秒后重试`
+    return `Today 上游频控（HTTP 429），${wait}。请求 ${method} ${path}${trace}`
+  }
+  if (status === 413) {
+    return `Today 拒绝了过大的请求（HTTP 413）。这段对话的上下文已超出该模型可接受的长度，`
+      + `请压缩历史或换用上下文更大的模型。请求 ${method} ${path}${trace}`
+  }
+  if (status === 402) {
+    return `Today 账号额度不足（HTTP 402），请在 Today 里检查套餐与剩余用量。请求 ${method} ${path}${trace}`
+  }
+  if (status === 401 || status === 403) {
+    return `Today 拒绝了当前登录态（HTTP ${status}），请在 Today 桌面端重新登录。请求 ${method} ${path}${trace}`
+  }
+  return `Today ${method} ${path} failed with HTTP ${status}${trace}`
+}
+
+/**
  * Map an HTTP status to the provider-neutral failure vocabulary.
  * @param status - observed HTTP status.
  * @returns the stable code.
  */
 function failureCodeFor(status) {
   if (status === 401 || status === 403) return 'AUTH'
+  if (status === 402) return 'QUOTA'
   if (status === 404) return 'HTTP_404'
+  if (status === 413) return 'TOO_LARGE'
   if (status === 429) return 'RATE_LIMIT'
   if (status >= 500) return 'SERVER'
   if (status >= 400) return 'INVALID_REQUEST'
@@ -282,7 +331,7 @@ export class TodayClient {
     if (!response.ok) {
       const detail = await safeText(response)
       throw new TodayApiError(
-        `Today ${init.method ?? 'GET'} ${path} failed with HTTP ${response.status}${detail === '' ? '' : `: ${detail}`}`,
+        explainFailure(response.status, init.method ?? 'GET', path, detail, retryAfterOf(response)),
         failureCodeFor(response.status),
         response.status,
       )

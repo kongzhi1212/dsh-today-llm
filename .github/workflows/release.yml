@@ -1,0 +1,60 @@
+name: release
+
+# Builds the offline bundle and attaches it to a GitHub release.
+#
+# Runs on a tag like v1.4.4. The tarball is built by the same script a
+# maintainer runs locally, so a release cannot drift from a hand-made archive.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check syntax
+        run: npm run check
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the offline bundle
+        run: node scripts/package.js
+
+      - name: Show what will be published
+        run: ls -lh dist/
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tgz
+            dist/install-windows.bat
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **Windows, no command line:** download `install-windows.bat` and the
+            `.tgz` into the same folder, then double-click the `.bat`.
+
+            **Any platform:**
+            ```
+            dsh plugin --profile desktop add ./dsh-today-llm-${{ github.ref_name }}.tgz
+            ```
+
+            The version in the filename drops the leading `v`; adjust if needed.

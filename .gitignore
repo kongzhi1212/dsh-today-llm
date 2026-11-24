@@ -24,3 +24,6 @@ scratch/
 .env
 .env.*
 *.local.json
+
+# packaged artefacts
+dist/

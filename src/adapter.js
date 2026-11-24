@@ -46,6 +46,55 @@ const SOCKET_COOLDOWN_MS = 5 * 60_000
 const MAX_TURNS = 20
 
 /**
+ * Characters per pseudo-streamed delta.
+ *
+ * Today hands back a finished string, so there is nothing to stream. Splitting
+ * it into deltas with a short pause between them lets the interface paint the
+ * answer as it arrives instead of showing nothing and then everything. The chunk
+ * is deliberately coarse: this is a reading experience, not a token stream.
+ */
+const STREAM_CHUNK_CHARS = 48
+
+/** Pause between pseudo-streamed deltas, in milliseconds. */
+const STREAM_CHUNK_DELAY_MS = 12
+
+/** Upper bound on how long pseudo-streaming may add to one turn. */
+const STREAM_BUDGET_MS = 1_200
+
+/**
+ * Split a finished reply into display-sized deltas.
+ *
+ * Cuts on a natural boundary where one is close by, so a chunk rarely ends
+ * mid-word, and never returns an empty array for non-empty text.
+ * @param text - the finished reply.
+ * @param size - preferred characters per delta.
+ * @returns the slices, in order.
+ */
+function sliceForStreaming(text, size) {
+  const width = Math.max(1, Math.floor(size))
+  const slices = []
+  let index = 0
+  while (index < text.length) {
+    let end = Math.min(text.length, index + width)
+    if (end < text.length) {
+      // Prefer breaking after whitespace or CJK punctuation near the limit.
+      const window = text.slice(index, end)
+      const boundary = Math.max(
+        window.lastIndexOf(' '),
+        window.lastIndexOf('\n'),
+        window.lastIndexOf('。'),
+        window.lastIndexOf('，'),
+        window.lastIndexOf('. '),
+      )
+      if (boundary > width / 2) end = index + boundary + 1
+    }
+    slices.push(text.slice(index, end))
+    index = end
+  }
+  return slices
+}
+
+/**
  * Derive a machine-stable device id.
  *
  * Today registers a device per `clientMachineId`, so a random value would add a
@@ -251,6 +300,15 @@ export class TodayAdapter {
      * list. Bounded so a long session cannot grow it without limit.
      */
     this.turns = []
+    /**
+     * The account's model as this plugin first observed it.
+     *
+     * Undefined until the first turn captures it. Restoring this value is the
+     * only mitigation for the account-wide selection: without it, using the
+     * plugin silently changes the model on every other device signed in to the
+     * same Today account.
+     */
+    this.baselineSelection = undefined
   }
 
   /**
@@ -542,6 +600,44 @@ export class TodayAdapter {
   }
 
   /**
+   * Remember the account's model before this plugin changes it.
+   *
+   * Pinning is destructive to the user's other devices: Today stores one
+   * selection per account, so the model picked here also becomes the model on
+   * their phone. Reading the previous value first is what makes restoring it
+   * afterwards possible.
+   * @param client - the authenticated client.
+   */
+  async captureBaseline(client) {
+    if (this.baselineSelection !== undefined) return
+    try {
+      const selection = await client.selection()
+      if (typeof selection === 'string' && selection !== '') this.baselineSelection = selection
+    } catch {
+      // Without a baseline there is nothing to restore; the turn still works.
+    }
+  }
+
+  /**
+   * Put the account's model back the way this plugin found it.
+   *
+   * Best effort: a failure here must not fail the turn, because the answer is
+   * already produced and the user asked for it.
+   * @param client - the authenticated client.
+   */
+  async restoreBaseline(client) {
+    if (this.config.restoreModelAfterTurn === false) return
+    const baseline = this.baselineSelection
+    if (baseline === undefined || this.selection === baseline) return
+    try {
+      await client.selectModel(baseline)
+      this.selection = baseline
+    } catch {
+      // Leave the selection where it is; the next turn re-pins regardless.
+    }
+  }
+
+  /**
    * Wait for one turn's reply, preferring the pushed event stream.
    *
    * The WebSocket reports the turn as soon as Today writes it, which is earlier
@@ -617,9 +713,16 @@ export class TodayAdapter {
       // turn retarget the model before this conversation finished. The pool
       // starts at one for that reason; raising it is a deliberate trade.
       const outcome = await this.modelLock.run(async () => {
-        await this.pinModel(options.model, client)
-        const conversationId = await client.startTaskConversation(prompt)
-        return await this.awaitTurn(client, conversationId, options)
+        await this.captureBaseline(client)
+        try {
+          await this.pinModel(options.model, client)
+          const conversationId = await client.startTaskConversation(prompt)
+          return await this.awaitTurn(client, conversationId, options)
+        } finally {
+          // Inside the lock and after the reply, so the account is left holding
+          // whatever it held before this plugin ran, not this turn's model.
+          await this.restoreBaseline(client)
+        }
       }, this.config.maxConcurrency)
       reply = outcome.text
       path = outcome.path
@@ -662,7 +765,22 @@ export class TodayAdapter {
       throw toFailure(new TodayApiError('Today finished the turn without any text', 'EMPTY_RESPONSE'))
     }
     yield { type: 'block-start', index: 0, blockType: 'text' }
-    yield { type: 'text-delta', index: 0, text: parsed.text }
+    // The reply is already complete; these deltas exist so the interface can
+    // render it progressively. The pause is capped by a budget so a long answer
+    // cannot make the turn noticeably slower than not streaming at all.
+    const chunkChars = Number.isFinite(this.config.streamChunkChars) ? this.config.streamChunkChars : STREAM_CHUNK_CHARS
+    const delayMs = Number.isFinite(this.config.streamChunkDelayMs) ? this.config.streamChunkDelayMs : STREAM_CHUNK_DELAY_MS
+    if (chunkChars > 0 && parsed.text.length > chunkChars) {
+      const slices = sliceForStreaming(parsed.text, chunkChars)
+      const budget = Math.max(0, this.config.streamBudgetMs ?? STREAM_BUDGET_MS)
+      const perSlice = slices.length > 1 ? Math.min(delayMs, Math.floor(budget / (slices.length - 1))) : 0
+      for (const slice of slices) {
+        yield { type: 'text-delta', index: 0, text: slice }
+        if (perSlice > 0) await new Promise(resolve => setTimeout(resolve, perSlice))
+      }
+    } else {
+      yield { type: 'text-delta', index: 0, text: parsed.text }
+    }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: parsed.text } }
     const counted = usage()
     if (counted !== undefined) yield { type: 'usage', usage: counted }

@@ -89,6 +89,7 @@ const EN = {
   'settings.usage': 'Report estimated token usage',
   'settings.region': 'Deployment',
   'settings.regionAuto': 'Detect automatically',
+  'settings.restoreModel': 'Restore account model after each turn',
   'settings.deviceId': 'Device id',
   'settings.deviceIdHint': 'Blank derives one from this machine and profile. Today registers each device id separately, so changing it adds a device to the account.',
   'settings.deviceIdDerived': 'derived automatically',
@@ -172,6 +173,7 @@ const ZH = {
   'settings.usage': '上报估算的 token 用量',
   'settings.region': '服务部署',
   'settings.regionAuto': '自动探测',
+  'settings.restoreModel': '每轮结束后恢复账号原模型',
   'settings.deviceId': '设备标识',
   'settings.deviceIdHint': '留空则用本机与 profile 派生出稳定值。Today 按这个标识登记设备，改动等于在账号里新增一个设备。',
   'settings.deviceIdDerived': '自动派生',
@@ -1011,6 +1013,7 @@ function TodaySettingsPage(props) {
     toggleRow('settings.strict', d.strictProtocol === true, checked => setField('strictProtocol', checked)),
     toggleRow('settings.socket', d.useSocket !== false, checked => setField('useSocket', checked)),
     toggleRow('settings.usage', d.reportUsage !== false, checked => setField('reportUsage', checked)),
+    toggleRow('settings.restoreModel', d.restoreModelAfterTurn !== false, checked => setField('restoreModelAfterTurn', checked)),
     // Last because it is the rarest thing to touch. It sat in the writable set
     // with no control, so the only way to set it was a hand-edited patch.
     textRow('settings.deviceId', d.deviceId ?? '', value => setField('deviceId', value), 'settings.deviceIdHint'),
@@ -1238,6 +1241,7 @@ function toDraft(config) {
     strictProtocol: source.strictProtocol,
     useSocket: source.useSocket,
     reportUsage: source.reportUsage,
+    restoreModelAfterTurn: source.restoreModelAfterTurn,
     region: source.region,
     deviceId: source.deviceId,
     models,
@@ -1264,6 +1268,7 @@ function editsOf(draft) {
     strictProtocol: draft.strictProtocol,
     useSocket: draft.useSocket,
     reportUsage: draft.reportUsage,
+    restoreModelAfterTurn: draft.restoreModelAfterTurn,
     region: draft.region,
     deviceId: draft.deviceId,
   }

@@ -1,6 +1,6 @@
 {
   "name": "dsh-today-llm",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "type": "module",
   "description": "Use the models of the locally signed-in Today desktop app as a DeepSeek Harness LLM provider.",
   "keywords": [
@@ -33,12 +33,18 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check index.js && node --check client.js && node --check src/adapter.js && node --check src/api.js && node --check src/credentials.js && node --check src/protocol.js && node --check src/socket.js && node --check src/model-lock.js"
+    "check": "node --check index.js && node --check client.js && node --check src/adapter.js && node --check src/api.js && node --check src/credentials.js && node --check src/protocol.js && node --check src/socket.js && node --check src/model-lock.js && node --check src/serve.js && node --check bin/doctor.js",
+    "doctor": "node bin/doctor.js",
+    "package": "node scripts/package.js"
+  },
+  "bin": {
+    "dsh-today-llm": "./bin/doctor.js"
   },
   "files": [
     "index.js",
     "client.js",
     "src",
+    "bin",
     "cordis.patch.yml",
     "locale/*.json",
     "docs",

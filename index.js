@@ -15,6 +15,7 @@
 import z from '@deepseek-ai/schemastery'
 import { TodayAdapter } from './src/adapter.js'
 import { readStoredAccount, describeMissingAccount } from './src/credentials.js'
+import { startProxy } from './src/serve.js'
 
 /** The provider route this bundle owns. */
 const PROVIDER = 'today'
@@ -62,6 +63,27 @@ export const Config = z.object({
     ),
   reportUsage: z.boolean().default(true)
     .description('Report estimated token counts. Today reports none, so these are approximations.'),
+  restoreModelAfterTurn: z.boolean().default(true)
+    .description(
+      'Put the account\'s model back after each turn. Today keeps one model per account, so '
+      + 'without this the model picked in DSH also becomes the model on your other devices.',
+    ),
+  streamChunkChars: z.number().default(48)
+    .description(
+      'Characters per streamed delta. Today returns the whole reply at once; splitting it lets '
+      + 'the interface paint progressively. 0 sends it in one delta.',
+    ),
+  streamChunkDelayMs: z.number().default(12)
+    .description('Pause between streamed deltas. Capped by a per-turn budget.'),
+  servePort: z.number().default(0)
+    .description(
+      'Also serve an OpenAI-compatible endpoint on this port, for editors and tools that '
+      + 'cannot speak the harness protocol. 0 disables it. It is read-only against your account.',
+    ),
+  serveHost: z.string().default('127.0.0.1')
+    .description('Interface for the OpenAI-compatible endpoint. Leave it on loopback unless you mean to expose it.'),
+  serveToken: z.string().default('')
+    .description('Bearer token the OpenAI-compatible endpoint requires. Empty accepts any caller on the host.'),
   deviceId: z.string().default('')
     .description(
       'Machine id Today registers this install under. Leave empty to derive a stable one '
@@ -86,6 +108,12 @@ const CONFIG_DEFAULTS = Object.freeze({
   strictProtocol: true,
   useSocket: true,
   reportUsage: true,
+  restoreModelAfterTurn: true,
+  streamChunkChars: 48,
+  streamChunkDelayMs: 12,
+  servePort: 0,
+  serveHost: '127.0.0.1',
+  serveToken: '',
   deviceId: '',
   region: 'auto',
   models: Object.freeze({}),
@@ -120,6 +148,12 @@ function resolveConfig(raw) {
     strictProtocol: flag('strictProtocol'),
     useSocket: flag('useSocket'),
     reportUsage: flag('reportUsage'),
+    restoreModelAfterTurn: flag('restoreModelAfterTurn'),
+    streamChunkChars: number('streamChunkChars', 0, 2_000),
+    streamChunkDelayMs: number('streamChunkDelayMs', 0, 200),
+    servePort: number('servePort', 0, 65_535),
+    serveHost: typeof source.serveHost === 'string' && source.serveHost !== '' ? source.serveHost : CONFIG_DEFAULTS.serveHost,
+    serveToken: typeof source.serveToken === 'string' ? source.serveToken : CONFIG_DEFAULTS.serveToken,
     // Carried through so the adapter can honour a user-chosen id. Without this
     // the adapter's `config.deviceId` branch was unreachable dead code.
     deviceId: typeof source.deviceId === 'string' ? source.deviceId : CONFIG_DEFAULTS.deviceId,
@@ -162,6 +196,35 @@ export function apply(ctx, rawConfig) {
   const adapter = new TodayAdapter({ config, resolveAccount })
 
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER], adapter))
+
+  // Optional OpenAI-compatible endpoint for clients that cannot speak the
+  // harness protocol. Off unless a port is configured: binding a socket is a
+  // side effect nobody expects from installing a model provider.
+  if (config.servePort > 0) {
+    ctx.effect(() => {
+      let handle
+      let closed = false
+      void (async () => {
+        try {
+          handle = await startProxy({
+            resolveAccount,
+            port: config.servePort,
+            host: config.serveHost,
+            token: config.serveToken === '' ? undefined : config.serveToken,
+            log: message => ctx.logger?.warn?.(`today proxy: ${message}`),
+          })
+          if (closed) await handle.close()
+          else ctx.logger?.info?.(`today proxy listening on http://${handle.host}:${handle.port}/v1`)
+        } catch (error) {
+          ctx.logger?.warn?.(`today proxy could not start: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      })()
+      return () => {
+        closed = true
+        void handle?.close?.()
+      }
+    })
+  }
 
   // A changed catalog must reach the selector without a restart.
   //
@@ -338,6 +401,12 @@ const WRITABLE_FIELDS = new Set([
   'reportUsage',
   'deviceId',
   'region',
+  'restoreModelAfterTurn',
+  'streamChunkChars',
+  'streamChunkDelayMs',
+  'servePort',
+  'serveHost',
+  'serveToken',
 ])
 
 /** Path the Settings page posts configuration edits to. */
