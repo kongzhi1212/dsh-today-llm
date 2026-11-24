@@ -172,4 +172,4 @@ Released as open source under the **MIT License**.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). You may use, modify, and redistribute this software, including commercially, provided the copyright and permission notices are retained. It is provided "as is", without warranty of any kind.
+MIT. See [LICENSE](https://github.com/kongzhi1212/dsh-today-llm/blob/main/LICENSE). You may use, modify, and redistribute this software, including commercially, provided the copyright and permission notices are retained. It is provided "as is", without warranty of any kind.
