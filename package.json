@@ -11,6 +11,15 @@
     "model-provider"
   ],
   "license": "MIT",
+  "author": "kongzhi1212 (https://github.com/kongzhi1212)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kongzhi1212/dsh-today-llm.git"
+  },
+  "homepage": "https://github.com/kongzhi1212/dsh-today-llm#readme",
+  "bugs": {
+    "url": "https://github.com/kongzhi1212/dsh-today-llm/issues"
+  },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
   },
