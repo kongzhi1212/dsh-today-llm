@@ -145,15 +145,31 @@ function optionIdOf(model) {
 }
 
 /**
- * Render the usage multiplier from a catalog description, e.g. `4× usage`.
+ * Render the usage multiplier from a catalog description.
+ *
+ * The service localizes this string, and returns a different shape per language:
+ * `4× usage` in English and `消耗 4 倍` in Chinese. Matching only the English form
+ * silently dropped every badge as soon as the client started asking for Chinese,
+ * which looked like the catalog had stopped reporting prices. Both shapes are
+ * accepted, and the unit word is what is matched rather than any prefix, so a
+ * third phrasing that keeps `×` or `倍` still parses.
  * @param description - the catalog description.
  * @returns the multiplier text, or undefined when the catalog states none.
  */
 function multiplierOf(description) {
   if (typeof description !== 'string') return undefined
-  const match = /(\d+(?:\.\d+)?)\s*[×x]\s*usage/iu.exec(description)
+  // "4× usage", "消耗 4 倍", "4 倍"
+  const match = /(\d+(?:\.\d+)?)\s*(?:[×x]\s*usage|倍)/iu.exec(description)
   return match === null ? undefined : `${match[1]}×`
 }
+
+/**
+ * Test seam for the two multipliers the catalog is known to use.
+ *
+ * Exported so a change in the upstream wording fails a test rather than quietly
+ * removing the badges from the selector, which is how this broke once already.
+ */
+export { multiplierOf }
 
 /**
  * Approximate a token count for mixed CJK and Latin text.
