@@ -48,6 +48,7 @@ Edits are **draft-based**: nothing is written until **Save**. Saving goes throug
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
+| Deployment | detect automatically | `auto`, mainland China, or international. The two are separate account systems, so the wrong choice finds no account |
 | Turn timeout | 300 s | How long to wait for one Today turn |
 | Poll interval | 700 ms | How often to re-read the conversation when falling back to polling |
 | Catalog refresh | 600 s | How often to re-read the model catalog; `0` disables it |

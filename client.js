@@ -75,6 +75,8 @@ const EN = {
   'settings.strict': 'Strict JSON protocol (needed for tool calls)',
   'settings.socket': 'Receive turns over the pushed event stream',
   'settings.usage': 'Report estimated token usage',
+  'settings.region': 'Deployment',
+  'settings.regionAuto': 'Detect automatically',
   'save': 'Save',
   'saving': 'Saving\u2026',
   'reset': 'Discard',
@@ -153,6 +155,8 @@ const ZH = {
   'settings.strict': '严格 JSON 协议（工具调用需要）',
   'settings.socket': '用推送的事件流接收回复',
   'settings.usage': '上报估算的 token 用量',
+  'settings.region': '服务部署',
+  'settings.regionAuto': '自动探测',
   'save': '保存',
   'saving': '保存中…',
   'reset': '放弃改动',
@@ -911,11 +915,38 @@ function TodaySettingsPage(props) {
     onChange,
   }))
 
+  /**
+   * A labelled dropdown.
+   * @param key - locale key for the label.
+   * @param value - the selected value.
+   * @param options - `{ value, labelKey }` choices.
+   * @param onChange - receives the new value.
+   * @param first - whether this is the card's first row.
+   * @returns the row element.
+   */
+  const selectRow = (key, value, options, onChange, first) => h('div', {
+    style: { ...s.row, ...(first === true ? s.rowFirst : {}) },
+  },
+  h('label', { style: s.rowLabel, htmlFor: `today-${key}` }, t(key)),
+  h('select', {
+    id: `today-${key}`,
+    value: value ?? '',
+    onChange: event => onChange(event.target.value),
+    style: { ...s.input, width: 'auto', minWidth: 190, cursor: 'pointer' },
+  }, ...options.map(option => h('option', { key: option.value, value: option.value }, t(option.labelKey)))))
+
   const settingsRows = [
+    // Placed first because it decides which service everything below talks to:
+    // the two deployments are separate account systems with separate hosts.
+    selectRow('settings.region', d.region ?? 'auto', [
+      { value: 'auto', labelKey: 'settings.regionAuto' },
+      { value: 'cn', labelKey: 'region.cn' },
+      { value: 'global', labelKey: 'region.global' },
+    ], value => setField('region', value), true),
     numberRow('settings.timeout', d.timeoutMs === undefined ? undefined : Math.round(d.timeoutMs / 1000), (value) => {
       const n = Number(value)
       setField('timeoutMs', Number.isFinite(n) && n > 0 ? Math.round(n * 1000) : 300000)
-    }, 10, true),
+    }, 10),
     numberRow('settings.poll', d.pollIntervalMs, (value) => {
       const n = Number(value)
       setField('pollIntervalMs', Number.isFinite(n) ? Math.round(n) : 700)
@@ -1159,6 +1190,7 @@ function toDraft(config) {
     strictProtocol: source.strictProtocol,
     useSocket: source.useSocket,
     reportUsage: source.reportUsage,
+    region: source.region,
     models,
     dirty: false,
   }
@@ -1183,6 +1215,7 @@ function editsOf(draft) {
     strictProtocol: draft.strictProtocol,
     useSocket: draft.useSocket,
     reportUsage: draft.reportUsage,
+    region: draft.region,
   }
   // Drop keys the page has no value for, so a partial draft cannot write
   // `undefined` into the row and reset a field the user never saw.
