@@ -89,12 +89,33 @@ Today stores the model choice per account. At concurrency 1 the sequence "pin th
 
 ## Requirements
 
-The Today desktop app must be signed in. The plugin reads its session from `%APPDATA%\Today CN` (macOS: `~/Library/Application Support/Today CN`, Linux: `$XDG_CONFIG_HOME/Today CN`):
+The Today desktop app must be signed in. The plugin reads its session from the app's user-data directory.
 
-- `os_crypt.encrypted_key` in `Local State` is protected by the platform secret store (DPAPI / Keychain / libsecret); the plugin only unwraps it.
-- The session itself lives in `account-credentials.slot-*`, encrypted with Chromium's `v10` envelope.
+Today ships **two independent deployments** with separate accounts:
 
-All of this is **read-only**: not one byte of the Today desktop app's files is modified.
+| Region | User-data directory | API / auth hosts |
+| --- | --- | --- |
+| Mainland China (`cn`) | `Today CN` | `api.todayai.cn` / `auth.todayai.cn` |
+| International (`global`) | `Today` | `api.today.ai` / `auth.today.ai` |
+
+With `region` at its default of `auto`, both are probed — CN first — and the settings page shows which one answered.
+
+Credentials come in two envelopes, chosen by the file's own magic rather than by platform:
+
+- **`v10`** — Chromium safeStorage. The key rides in `os_crypt.encrypted_key` inside `Local State`, protected by the platform secret store (DPAPI / Keychain / libsecret).
+- **`TDK1`** — Today's own envelope, keyed from the macOS Keychain item `ai.today.desktop.account-credentials`. The macOS build uses this instead of safeStorage.
+
+The session itself lives in `account-credentials.slot-*`. All of this is **read-only**: not one byte of the Today desktop app's files is modified.
+
+## Development
+
+```bash
+pnpm install
+pnpm test    # node --test, 34 cases
+pnpm check   # per-file syntax check
+```
+
+The tests cover pure logic only: reply parsing, envelope layout, request headers and failure codes, and the concurrency lock. They **never touch the network or a real credential** — the credential cases redirect the probe path to an empty temporary directory, so a failure message cannot carry your account details.
 
 ## Known limits
 
@@ -105,6 +126,7 @@ All of this is **read-only**: not one byte of the Today desktop app's files is m
 | Its own tools stay enabled | That agent has file, command and connector tools the API cannot disable. |
 | Account-wide model choice | See the risk note above; the setting exists, but the trade-off is real. |
 | Estimated usage | Today reports no token counts, so conversation usage is derived from character length. The plan usage on the settings page is a real reading. |
+| Context window is an assumption | **Today's API does not report context length** — the catalog carries only name, usage multiplier and publisher. `defaultContextWindow` is a conservative guess, not a measurement; tune per model via `models` if you know better. |
 | Isolated conversations | Each request runs in a fresh `new_task` conversation, so it never pollutes your Today main chat and never carries your chat history. |
 
 ## Disabling

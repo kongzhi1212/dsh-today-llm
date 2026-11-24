@@ -1,14 +1,18 @@
 /**
  * Reads the account already signed in by the local Today desktop app.
  *
- * The desktop client stores its session in
- * `<appData>/Today CN/account-credentials.slot-a` as a Chromium `v10` envelope
- * (AES-256-GCM, key derived with PBKDF2-SHA1 from a master key). The master key
- * itself lives in `Local State` as `os_crypt.encrypted_key`, wrapped by the
- * platform's user-scoped secret store: DPAPI on Windows, Keychain on macOS,
- * libsecret on Linux.
+ * The desktop client stores its session in `<appData>/<product>/account-credentials.slot-a`
+ * in one of two envelopes:
  *
- * Everything here is read-only. The desktop app's own files are never written.
+ * - `v10` — Chromium's safeStorage envelope, AES-256-GCM with a key derived by
+ *   PBKDF2-SHA1 from the master key in `Local State` (`os_crypt.encrypted_key`),
+ *   itself wrapped by DPAPI on Windows, Keychain on macOS, or libsecret on Linux.
+ * - `TDK1` — Today's own key-store envelope, AES-256-GCM with a key read from
+ *   the macOS Keychain item `ai.today.desktop.account-credentials`, which is
+ *   what the macOS build uses instead of safeStorage.
+ *
+ * Both layouts carry the same plaintext. Everything here is read-only: the
+ * desktop app's own files are never written.
  *
  * @module dsh-today-llm/credentials
  */
@@ -26,39 +30,54 @@ const CHROMIUM_ITERATIONS = 1
 /** AES-256-GCM key length in bytes. */
 const KEY_BYTES = 32
 /** Length of the `v10` prefix. */
-const PREFIX_BYTES = 3
+const V10_PREFIX_BYTES = 3
+/** Length of the `TDK1` prefix. */
+const TDK1_PREFIX_BYTES = 4
 /** Length of the trailing GCM authentication tag. */
 const TAG_BYTES = 16
-/** Length of the IV Chromium writes after the prefix. */
+/** Length of the IV Chromium writes after the `v10` prefix. */
 const IV_BYTES = 12
 
+/** The two builds and the user-data directory each one uses. */
+export const REGION_PRODUCT_DIRS = Object.freeze({
+  cn: 'Today CN',
+  global: 'Today',
+})
+
+/** Regions this module knows how to locate. */
+export const REGIONS = Object.freeze(['cn', 'global'])
+
 /**
- * Candidate user-data directories, most specific first. The CN build and the
- * international build use different product names, and both can be present.
+ * Candidate user-data directories as `{ dir, region }`, most specific first.
+ *
+ * `region` narrows the probe to one build; without it both are tried, CN first,
+ * which matches the order this plugin supported before it knew about regions.
+ * @param region - `cn`, `global`, or undefined to probe both.
  * @returns absolute candidate directories in probe order.
  */
-function candidateUserDataDirs() {
-  const dirs = []
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA
-    if (appData !== undefined && appData !== '') {
-      dirs.push(join(appData, 'Today CN'), join(appData, 'Today'))
+function candidateUserDataDirs(region) {
+  const wanted = region === 'cn' || region === 'global' ? [region] : ['cn', 'global']
+  const bases = []
+  for (const name of wanted) {
+    const product = REGION_PRODUCT_DIRS[name]
+    if (process.platform === 'win32') {
+      const appData = process.env.APPDATA
+      if (appData === undefined || appData === '') continue
+      bases.push({ dir: join(appData, product), region: name })
+    } else if (process.platform === 'darwin') {
+      bases.push({ dir: join(homedir(), 'Library', 'Application Support', product), region: name })
+    } else {
+      const config = process.env.XDG_CONFIG_HOME !== undefined && process.env.XDG_CONFIG_HOME !== ''
+        ? process.env.XDG_CONFIG_HOME
+        : join(homedir(), '.config')
+      bases.push({ dir: join(config, product), region: name })
     }
-  } else if (process.platform === 'darwin') {
-    const home = homedir()
-    dirs.push(
-      join(home, 'Library', 'Application Support', 'Today CN'),
-      join(home, 'Library', 'Application Support', 'Today'),
-    )
-  } else {
-    const config = process.env.XDG_CONFIG_HOME !== undefined && process.env.XDG_CONFIG_HOME !== ''
-      ? process.env.XDG_CONFIG_HOME
-      : join(homedir(), '.config')
-    dirs.push(join(config, 'Today CN'), join(config, 'Today'))
   }
   const override = process.env.TODAY_USER_DATA_DIR
-  if (override !== undefined && override !== '') dirs.unshift(override)
-  return dirs
+  if (override !== undefined && override !== '') {
+    bases.unshift({ dir: override, region: region === 'global' ? 'global' : 'cn' })
+  }
+  return bases
 }
 
 /**
@@ -124,6 +143,28 @@ function deriveFromPassword(password) {
 }
 
 /**
+ * Read the key-store master key the macOS build keeps in the Keychain.
+ *
+ * This is a different secret from the Chromium safeStorage password: the macOS
+ * build puts its own envelope key here instead of using `v10`.
+ * @returns the raw AES key.
+ * @throws Error when the item is absent, which means the account was never
+ *   stored in the `TDK1` envelope.
+ */
+function keyStoreMasterKey() {
+  const output = execFileSync(
+    'security',
+    ['find-generic-password', '-s', 'ai.today.desktop.account-credentials', '-a', 'credential-key', '-w'],
+    { encoding: 'utf8', timeout: 15_000 },
+  )
+  const decoded = Buffer.from(output.trim(), 'base64')
+  if (decoded.length !== KEY_BYTES) {
+    throw new Error(`Today key-store key has ${decoded.length} bytes, expected ${KEY_BYTES}`)
+  }
+  return decoded
+}
+
+/**
  * Decrypt one Chromium `v10` payload.
  * @param key - raw AES key from {@link unwrapMasterKey}.
  * @param payload - the whole file, including its `v10` prefix.
@@ -131,12 +172,37 @@ function deriveFromPassword(password) {
  * @throws Error when the prefix or the authentication tag is wrong.
  */
 function decryptV10(key, payload) {
-  const prefix = payload.subarray(0, PREFIX_BYTES).toString('ascii')
+  const prefix = payload.subarray(0, V10_PREFIX_BYTES).toString('ascii')
   if (prefix !== 'v10') throw new Error(`unsupported credential envelope ${JSON.stringify(prefix)}`)
-  const iv = payload.subarray(PREFIX_BYTES, PREFIX_BYTES + IV_BYTES)
+  const iv = payload.subarray(V10_PREFIX_BYTES, V10_PREFIX_BYTES + IV_BYTES)
   const tag = payload.subarray(payload.length - TAG_BYTES)
-  const body = payload.subarray(PREFIX_BYTES + IV_BYTES, payload.length - TAG_BYTES)
+  const body = payload.subarray(V10_PREFIX_BYTES + IV_BYTES, payload.length - TAG_BYTES)
   const decipher = createDecipheriv('aes-256-gcm', key, iv)
+  decipher.setAuthTag(tag)
+  return Buffer.concat([decipher.update(body), decipher.final()]).toString('utf8')
+}
+
+/**
+ * Decrypt one `TDK1` payload.
+ *
+ * Layout differs from `v10`: a four-byte magic, then the IV, then the
+ * authentication tag, then the ciphertext. The magic is authenticated as
+ * additional data, so a rewritten header fails to decrypt rather than silently
+ * yielding the wrong branch.
+ * @param key - raw AES key from {@link keyStoreMasterKey}.
+ * @param payload - the whole file, including its `TDK1` prefix.
+ * @returns the UTF-8 plaintext.
+ * @throws Error when the magic or the authentication tag is wrong.
+ */
+function decryptTdk1(key, payload) {
+  const magic = payload.subarray(0, TDK1_PREFIX_BYTES).toString('ascii')
+  if (magic !== 'TDK1') throw new Error(`unsupported credential envelope ${JSON.stringify(magic)}`)
+  const iv = payload.subarray(TDK1_PREFIX_BYTES, TDK1_PREFIX_BYTES + IV_BYTES)
+  const tagStart = TDK1_PREFIX_BYTES + IV_BYTES
+  const tag = payload.subarray(tagStart, tagStart + TAG_BYTES)
+  const body = payload.subarray(tagStart + TAG_BYTES)
+  const decipher = createDecipheriv('aes-256-gcm', key, iv)
+  decipher.setAAD(Buffer.from('TDK1', 'ascii'))
   decipher.setAuthTag(tag)
   return Buffer.concat([decipher.update(body), decipher.final()]).toString('utf8')
 }
@@ -159,20 +225,50 @@ function masterKeyOf(dir) {
 }
 
 /**
+ * A per-directory reader that decrypts whichever envelope the files use.
+ *
+ * The envelope is chosen by the file's own magic rather than guessed from the
+ * platform, so a macOS install that uses `v10` and one that uses `TDK1` both
+ * work, and the two master keys are only read when their envelope appears.
+ * @param dir - user-data directory.
+ * @returns a function that decrypts one file to JSON.
+ */
+function readerFor(dir) {
+  let v10Key
+  let keyStoreKey
+  return (filePath) => {
+    const payload = readFileSync(filePath)
+    const magic4 = payload.subarray(0, 4).toString('ascii')
+    try {
+      if (magic4 === 'TDK1') {
+        // Absent on anything but the macOS key store; surface that plainly.
+        if (keyStoreKey === undefined) keyStoreKey = keyStoreMasterKey()
+        return JSON.parse(decryptTdk1(keyStoreKey, payload))
+      }
+      if (v10Key === undefined) v10Key = masterKeyOf(dir)
+      return JSON.parse(decryptV10(v10Key, payload))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`cannot decrypt ${filePath}: ${message}`)
+    }
+  }
+}
+
+/**
  * Pick the credential slot the head names.
  *
  * Today keeps two alternating slots plus a head record that points at the live
  * one; reading the head avoids picking a half-written or stale sibling.
  * @param dir - user-data directory.
- * @param key - raw AES key.
- * @returns plaintext of the slot the head selects, when the head parses.
+ * @param read - the directory's envelope-aware reader.
+ * @returns the record the head selects, when one parses.
  */
-function slotPlaintext(dir, key) {
+function slotRecord(dir, read) {
   const headPath = existingFile(dir, 'account-credentials.head')
   let index = 0
   if (headPath !== undefined) {
     try {
-      const head = JSON.parse(decryptV10(key, readFileSync(headPath)))
+      const head = read(headPath)
       if (Number.isInteger(head?.slotIndex) && head.slotIndex >= 0 && head.slotIndex <= 1) index = head.slotIndex
     } catch {
       // A stale or unreadable head is not fatal: the signed-out tombstone is a
@@ -184,7 +280,7 @@ function slotPlaintext(dir, key) {
     const path = existingFile(dir, `account-credentials${suffix}`)
     if (path === undefined) continue
     try {
-      const parsed = JSON.parse(decryptV10(key, readFileSync(path)))
+      const parsed = read(path)
       if (typeof parsed?.record === 'object' && parsed.record !== null) return parsed.record
     } catch {
       // Try the other slot.
@@ -204,52 +300,50 @@ function signedOut(dir) {
 
 /**
  * Read the stored Today account record.
- * @returns the record plus where it was found, or undefined when no signed-in account exists.
+ * @param options - optional `region` narrowing the probe to one build.
+ * @returns the record, the directory and region it came from, or undefined.
  */
-export function readStoredAccount() {
-  for (const dir of candidateUserDataDirs()) {
+export function readStoredAccount(options = {}) {
+  for (const { dir, region } of candidateUserDataDirs(options.region)) {
     if (signedOut(dir)) continue
-    if (!existsSync(join(dir, 'Local State'))) continue
-    let key
-    try {
-      key = masterKeyOf(dir)
-    } catch {
-      continue
-    }
-    const record = slotPlaintext(dir, key)
+    // `Local State` is only needed for the `v10` envelope; a `TDK1` install has
+    // its key in the Keychain, so its absence must not skip the directory.
+    const read = readerFor(dir)
+    const record = slotRecord(dir, read)
     if (record === undefined) continue
     if (typeof record.refreshCredential !== 'string' || record.refreshCredential === '') continue
-    return { record, userDataDir: dir }
+    return { record, userDataDir: dir, region }
   }
   return undefined
 }
 
 /**
  * Describe why no account could be read, for a diagnostic that does not guess.
+ * @param options - optional `region` narrowing the probe to one build.
  * @returns one line naming each probed directory and the first failure in it.
  */
-export function describeMissingAccount() {
+export function describeMissingAccount(options = {}) {
   const lines = []
-  for (const dir of candidateUserDataDirs()) {
+  for (const { dir, region } of candidateUserDataDirs(options.region)) {
     if (!existsSync(dir)) {
-      lines.push(`${dir}: not found`)
+      lines.push(`${dir} (${region}): not found`)
       continue
     }
     if (signedOut(dir)) {
-      lines.push(`${dir}: signed out (account-credentials.signed-out)`)
+      lines.push(`${dir} (${region}): signed out (account-credentials.signed-out)`)
       continue
     }
-    if (!existsSync(join(dir, 'Local State'))) {
-      lines.push(`${dir}: no Local State`)
-      continue
+    const read = readerFor(dir)
+    const headPath = existingFile(dir, 'account-credentials.head')
+    if (headPath !== undefined) {
+      try {
+        read(headPath)
+      } catch (error) {
+        lines.push(`${dir} (${region}): ${error instanceof Error ? error.message : String(error)}`)
+        continue
+      }
     }
-    try {
-      masterKeyOf(dir)
-    } catch (error) {
-      lines.push(`${dir}: master key unavailable (${error instanceof Error ? error.message : String(error)})`)
-      continue
-    }
-    lines.push(`${dir}: readable, but no credential slot held a usable record`)
+    lines.push(`${dir} (${region}): readable, but no credential slot held a usable record`)
   }
   return lines.join('; ')
 }

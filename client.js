@@ -40,6 +40,10 @@ const EN = {
   'section.diagnostics': 'Diagnostics',
   'account.identifier': 'Signed in as',
   'account.unknown': 'unknown',
+  'account.region': 'Deployment',
+  'region.cn': 'Mainland China (todayai.cn)',
+  'region.global': 'International (today.ai)',
+  'region.unknown': 'unknown',
   'account.dataDir': 'Credential directory',
   'usage.plan': 'Plan',
   'usage.remaining': 'Remaining',
@@ -114,6 +118,10 @@ const ZH = {
   'section.diagnostics': '诊断',
   'account.identifier': '当前登录',
   'account.unknown': '未知',
+  'account.region': '服务区域',
+  'region.cn': '中国大陆（todayai.cn）',
+  'region.global': '国际版（today.ai）',
+  'region.unknown': '未知',
   'account.dataDir': '凭据目录',
   'usage.plan': '套餐',
   'usage.remaining': '剩余',
@@ -745,6 +753,7 @@ function TodaySettingsPage(props) {
   // ---- account ----
   const accountCard = h('div', { style: s.card },
     row('account.identifier', data0?.account?.identifier ?? t('account.unknown'), true),
+    row('account.region', t(`region.${data0?.account?.region ?? 'unknown'}`)),
     row('account.dataDir', data0?.account?.dataDir ?? '\u2014'))
 
   // ---- usage ----

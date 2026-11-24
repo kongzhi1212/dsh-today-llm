@@ -10,12 +10,52 @@
 
 import { randomUUID } from 'node:crypto'
 
-/** Auth host that mints access tokens from the stored session. */
-export const AUTH_BASE = 'https://auth.todayai.cn'
+/**
+ * Hosts per deployment.
+ *
+ * Today ships a mainland-China build and an international one; they are
+ * separate services with separate accounts, so a plugin that hardcoded one could
+ * never work for a user of the other. `webOrigin` is the site the API calls
+ * belong to and is what the `Origin` header must name.
+ */
+export const REGION_CONFIG = Object.freeze({
+  cn: Object.freeze({
+    apiBaseUrl: 'https://api.todayai.cn',
+    authBaseUrl: 'https://auth.todayai.cn',
+    webOrigin: 'https://todayai.cn',
+    clientPlatform: 'windows',
+  }),
+  global: Object.freeze({
+    apiBaseUrl: 'https://api.today.ai',
+    authBaseUrl: 'https://auth.today.ai',
+    webOrigin: 'https://today.ai',
+    clientPlatform: 'windows',
+  }),
+})
+
+/** Region used when the caller does not name one. */
+export const DEFAULT_REGION = 'cn'
+
+/**
+ * Auth host that mints access tokens from the stored session.
+ *
+ * Kept exported for the CN deployment so existing imports keep working; the
+ * client itself reads the per-region table.
+ */
+export const AUTH_BASE = REGION_CONFIG.cn.authBaseUrl
 /** API host that serves conversations, tasks and the model catalog. */
-export const API_BASE = 'https://api.todayai.cn'
+export const API_BASE = REGION_CONFIG.cn.apiBaseUrl
 /** Web origin the API calls belong to, sent as `Origin`. */
-export const APP_ORIGIN = 'https://todayai.cn'
+export const APP_ORIGIN = REGION_CONFIG.cn.webOrigin
+
+/**
+ * Desktop client version this plugin presents itself as.
+ *
+ * The upstream service sees a desktop client talking to it; sending no version,
+ * or a browser user agent, is both less accurate and more conspicuous. Bump it
+ * only when the request shape changes, not to chase the app's own releases.
+ */
+const DESKTOP_VERSION = '1.23.0'
 
 /**
  * Attribution value sent on every request, matching the harness default.
@@ -106,17 +146,22 @@ function failureCodeFor(status) {
  */
 export class TodayClient {
   /**
-   * @param options - session credential and fetch override.
+   * @param options - session credential, region and fetch override.
    * @param options.refreshCredential - the long-lived better-auth session token.
+   * @param options.region - `cn` (default) or `global`.
    * @param options.fetch - fetch implementation; defaults to the global.
    */
-  constructor({ refreshCredential, fetch: fetchImpl }) {
+  constructor({ refreshCredential, region, fetch: fetchImpl }) {
     this.refreshCredential = refreshCredential
     this.fetch = fetchImpl ?? globalThis.fetch
+    this.region = region === 'global' ? 'global' : DEFAULT_REGION
+    this.hosts = REGION_CONFIG[this.region]
     this.accessToken = undefined
     this.expiresAt = 0
     /** Origin the socket layer derives its URL from. */
-    this.apiBaseUrl = API_BASE
+    this.apiBaseUrl = this.hosts.apiBaseUrl
+    this.authBaseUrl = this.hosts.authBaseUrl
+    this.webOrigin = this.hosts.webOrigin
   }
 
   /**
@@ -126,13 +171,25 @@ export class TodayClient {
    * host owns `/api/auth/*`, while the API host is a different origin and must
    * not receive the auth origin. Sending one origin for both was wrong for every
    * API call.
+   *
+   * The `x-app-version` and `x-client-platform` pair mirrors what the desktop
+   * client sends, because that is what the service expects this traffic to be.
    * @param target - which origin this request is bound for.
    * @param extra - additional headers to merge.
    * @returns the header record.
    */
   headers(target, extra = {}) {
-    const origin = target === 'api' ? APP_ORIGIN : AUTH_BASE
-    return { accept: 'application/json', origin, 'user-agent': USER_AGENT, ...extra }
+    const origin = target === 'api' ? this.webOrigin : this.authBaseUrl
+    return {
+      accept: 'application/json',
+      'accept-language': 'zh-CN,zh;q=0.9',
+      origin,
+      referer: `${this.webOrigin}/`,
+      'user-agent': USER_AGENT,
+      'x-app-version': DESKTOP_VERSION,
+      'x-client-platform': this.hosts.clientPlatform,
+      ...extra,
+    }
   }
 
   /**
@@ -156,7 +213,7 @@ export class TodayClient {
    * @throws {TodayApiError} when the session was rejected.
    */
   async mintAccessToken() {
-    const response = await this.fetch(`${AUTH_BASE}/api/auth/token`, {
+    const response = await this.fetch(`${this.authBaseUrl}/api/auth/token`, {
       method: 'GET',
       signal: this.deadline(undefined),
       headers: this.headers('auth', { authorization: `Bearer ${this.refreshCredential}` }),
@@ -202,7 +259,7 @@ export class TodayClient {
     const token = await this.token()
     let response
     try {
-      response = await this.fetch(`${API_BASE}${path}`, {
+      response = await this.fetch(`${this.apiBaseUrl}${path}`, {
         ...init,
         signal: this.deadline(signal),
         headers: this.headers('api', { authorization: `Bearer ${token}`, ...init.headers }),

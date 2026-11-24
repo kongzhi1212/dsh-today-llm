@@ -193,11 +193,12 @@ export class TodayAdapter {
   /**
    * @param options - provider wiring.
    * @param options.config - resolved plugin config.
-   * @param options.resolveCredential - returns the refresh credential, or throws a diagnosable error.
+   * @param options.resolveAccount - returns the stored account and region, or throws a diagnosable error.
    */
-  constructor({ config, resolveCredential }) {
+  constructor({ config, resolveAccount }) {
     this.config = config
-    this.resolveCredential = resolveCredential
+    this.resolveAccount = resolveAccount
+    this.account = undefined
     this.catalog = []
     this.selection = undefined
     this.client = undefined
@@ -280,12 +281,26 @@ export class TodayAdapter {
   }
 
   /**
+   * Return the cached account, resolving it once per client.
+   * @returns the stored account and its region.
+   */
+  currentAccount() {
+    if (this.account !== undefined) return this.account
+    this.account = this.resolveAccount()
+    return this.account
+  }
+
+  /**
    * Return the cached client, building one from the stored account when needed.
    * @returns the authenticated client.
    */
   currentClient() {
     if (this.client !== undefined) return this.client
-    this.client = new TodayClient({ refreshCredential: this.resolveCredential() })
+    const account = this.currentAccount()
+    this.client = new TodayClient({
+      refreshCredential: account.refreshCredential,
+      region: account.region,
+    })
     return this.client
   }
 

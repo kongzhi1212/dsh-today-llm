@@ -67,6 +67,11 @@ export const Config = z.object({
       'Machine id Today registers this install under. Leave empty to derive a stable one '
       + 'from this machine and profile; set it only to share an id across installs.',
     ),
+  region: z.union([z.const('auto'), z.const('cn'), z.const('global')]).default('auto')
+    .description(
+      'Which Today build to read the account from. "auto" probes both, mainland China first. '
+      + 'The two services have separate accounts and separate hosts.',
+    ),
   models: z.dict(ModelPreference).default({})
     .description('Per-model overrides, keyed by model id. Hidden models also leave the selector.'),
 })
@@ -82,6 +87,7 @@ const CONFIG_DEFAULTS = Object.freeze({
   useSocket: true,
   reportUsage: true,
   deviceId: '',
+  region: 'auto',
   models: Object.freeze({}),
 })
 
@@ -117,6 +123,7 @@ function resolveConfig(raw) {
     // Carried through so the adapter can honour a user-chosen id. Without this
     // the adapter's `config.deviceId` branch was unreachable dead code.
     deviceId: typeof source.deviceId === 'string' ? source.deviceId : CONFIG_DEFAULTS.deviceId,
+    region: source.region === 'cn' || source.region === 'global' ? source.region : CONFIG_DEFAULTS.region,
     models,
   }
 }
@@ -130,21 +137,29 @@ export function apply(ctx, rawConfig) {
   const config = resolveConfig(rawConfig)
 
   /**
-   * Return the stored session credential, or explain why there is none.
-   * @returns the refresh credential.
+   * Return the stored account and its region, or explain why there is none.
+   *
+   * The region travels with the credential because the two Today builds are
+   * separate services: a CN account cannot be used against the international
+   * hosts, so the client must be built for whichever build supplied the record.
+   * @returns the account record, region and data directory.
    */
-  const resolveCredential = () => {
-    const stored = readStoredAccount()
+  const resolveAccount = () => {
+    const stored = readStoredAccount({ region: config.region === 'auto' ? undefined : config.region })
     if (stored === undefined) {
       throw new Error(
         'No signed-in Today account was found. Sign in with the Today desktop app, then retry. '
-        + describeMissingAccount(),
+        + describeMissingAccount({ region: config.region === 'auto' ? undefined : config.region }),
       )
     }
-    return stored.record.refreshCredential
+    return {
+      refreshCredential: stored.record.refreshCredential,
+      region: stored.region,
+      userDataDir: stored.userDataDir,
+    }
   }
 
-  const adapter = new TodayAdapter({ config, resolveCredential })
+  const adapter = new TodayAdapter({ config, resolveAccount })
 
   ctx.effect(() => ctx.llm.registerAdapter([PROVIDER], adapter))
 
@@ -322,6 +337,7 @@ const WRITABLE_FIELDS = new Set([
   'useSocket',
   'reportUsage',
   'deviceId',
+  'region',
 ])
 
 /** Path the Settings page posts configuration edits to. */
@@ -373,13 +389,19 @@ async function statusSnapshot(adapter, config, revision) {
     revision,
     fetchedAt: new Date().toISOString(),
   }
-  const stored = readStoredAccount()
+  const stored = readStoredAccount({ region: config.region === 'auto' ? undefined : config.region })
+  const missing = config.region === 'auto' ? undefined : config.region
   if (stored === undefined) {
-    return { ...base, ok: false, error: `No signed-in Today account. ${describeMissingAccount()}` }
+    return {
+      ...base,
+      ok: false,
+      error: `No signed-in Today account. ${describeMissingAccount({ region: missing })}`,
+    }
   }
   const account = {
     identifier: typeof stored.record.user?.identifier === 'string' ? stored.record.user.identifier : undefined,
     dataDir: stored.userDataDir,
+    region: stored.region,
     source: typeof stored.record.source === 'string' ? stored.record.source : undefined,
   }
   // The model snapshot is the page's core; the rest is supplementary. A failure

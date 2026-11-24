@@ -38,7 +38,7 @@ dsh plugin add /path/to/dsh-today-llm
 
 | 区域 | 内容 | 来源 |
 | --- | --- | --- |
-| 账号 | 登录标识、凭据目录 | 本地凭据文件 |
+| 账号 | 登录标识、服务区域、凭据目录 | 本地凭据文件 |
 | 套餐与用量 | 套餐级别、剩余百分比、重置时间、服务状态 | `/v1/pricing/status` |
 | 最近任务 | 最近 8 条后台任务及其状态 | `/v1/tasks` |
 | 最新日记 | 当日日记标题与摘要 | `/v1/diaries` |
@@ -110,12 +110,33 @@ Today 的模型选择按账号保存。并发设为 1 时，「设定模型 → 
 
 ## 使用前提
 
-本机必须已登录 Today 桌面端。插件读取 `%APPDATA%\Today CN`（macOS 为 `~/Library/Application Support/Today CN`，Linux 为 `$XDG_CONFIG_HOME/Today CN`）下的登录凭据：
+本机必须已登录 Today 桌面端。插件读取 `%APPDATA%\Today CN`（macOS 为 `~/Library/Application Support/Today CN`，Linux 为 `$XDG_CONFIG_HOME/Today CN`）下的登录凭据。
 
-- `Local State` 里的 `os_crypt.encrypted_key` 由系统凭据库（Windows DPAPI / macOS Keychain / Linux libsecret）保护，插件只做解包。
-- 真正的会话记录在 `account-credentials.slot-*`，用 Chromium 的 `v10` 信封加密。
+Today 有**两个独立部署**，账号体系不互通：
 
-这一切都是**只读**的：Today 桌面端的文件一个字节都不会被改动。
+| 区域 | 用户数据目录 | API / 认证域名 |
+| --- | --- | --- |
+| 中国大陆（`cn`） | `Today CN` | `api.todayai.cn` / `auth.todayai.cn` |
+| 国际版（`global`） | `Today` | `api.today.ai` / `auth.today.ai` |
+
+`region` 设为 `auto`（默认）时两个都探测，先 CN 后 global，设置页会显示实际命中的区域。
+
+凭据有两种信封，插件按文件头自动识别：
+
+- **`v10`** —— Chromium safeStorage。密钥在 `Local State` 的 `os_crypt.encrypted_key`，由系统凭据库（Windows DPAPI / macOS Keychain / Linux libsecret）保护。
+- **`TDK1`** —— Today 自己的信封，密钥在 macOS 钥匙串条目 `ai.today.desktop.account-credentials` 里。macOS 版用它代替 safeStorage。
+
+真正的会话记录在 `account-credentials.slot-*`。这一切都是**只读**的：Today 桌面端的文件一个字节都不会被改动。
+
+## 开发
+
+```bash
+pnpm install
+pnpm test    # node --test，34 项
+pnpm check   # 逐个文件的语法检查
+```
+
+测试只覆盖纯逻辑：协议解析、信封布局、请求头与错误码映射、并发锁。它们**不联网、不碰真实凭据**——凭据相关的用例把探测路径重定向到临时空目录，所以失败信息里不会出现你的账号。
 
 ## 必须知道的限制
 
@@ -126,6 +147,7 @@ Today 的模型选择按账号保存。并发设为 1 时，「设定模型 → 
 | 自有工具无法关闭 | 该 agent 有自己的文件、命令与连接器工具，接口无法禁用。提示词要求它改为请求 DSH 的工具，但不能保证。 |
 | 模型选择是账号级 | Today 按账号保存一个当前模型，消息接口忽略任何按请求的模型字段。因此插件默认把「设定模型 → 发起对话 → 等到回复」整段串行化，不同模型的并发请求会排队而不是互相覆盖。并发数可在设置页调整。 |
 | 用量是估算 | Today 不返回 token 用量，计数按字符数估算（中日韩字符与拉丁字符分别折算）。设置页的套餐用量则是 Today 的真实读数。 |
+| 上下文窗口是假设值 | **Today 的接口不返回上下文长度**（目录里只有名称、用量倍率、发布方）。`defaultContextWindow` 是一个保守假设，不是实测值；某模型实际能吃多少 token，只能靠 `models` 里的单独覆盖来调。 |
 | 会话是隔离的 | 每个请求都在一个新建的 `new_task` 会话里跑，不会污染 Today 主对话，也不携带你的聊天历史。 |
 
 ## 配置
@@ -143,6 +165,8 @@ Today 的模型选择按账号保存。并发设为 1 时，「设定模型 → 
 | `useSocket` | `true` | 用推送事件流接收回复；关闭则一律轮询。 |
 | `reportUsage` | `true` | 是否上报估算的 token 用量。 |
 | `models` | `{}` | 按模型 id 覆盖：`{ "glm-5.3": { "hidden": true, "contextWindow": 500000 } }` |
+| `deviceId` | 派生 | Today 登记的机器标识。留空则由「主机 + 用户 + profile」哈希出稳定值。 |
+| `region` | `auto` | `auto` / `cn` / `global`。两个区域是**独立账号体系**，域名也不同。 |
 
 ## 停用
 
