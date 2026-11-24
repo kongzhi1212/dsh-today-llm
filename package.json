@@ -1,6 +1,6 @@
 {
   "name": "dsh-today-llm",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "type": "module",
   "description": "Use the locally signed-in Today (Today AI) desktop account as a DeepSeek Harness LLM provider: GLM, Kimi, Qwen, MiniMax and DeepSeek models through one account.",
   "keywords": [

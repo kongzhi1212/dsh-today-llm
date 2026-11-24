@@ -1,11 +1,22 @@
+<div align="center">
+
 # Today 模型
 
-把本机已登录的 **Today 桌面端**账号接到 DeepSeek Harness，作为一个名为 `today` 的模型提供方。接进来的是这个账号在 Today 里能用的所有模型——**GLM、Kimi、Qwen、MiniMax、DeepSeek** 等，不需要另外充值或建号。
+把本机已登录的 **Today 桌面端**账号接入 DeepSeek Harness —— 一个账号就能用上 **GLM、Kimi、Qwen、MiniMax、DeepSeek**，带逐模型用量倍率、完整设置页与诊断能力。
+
+[English](README.en.md) · [安装](#安装) · [能用哪些模型](#能用哪些模型) · [设置页](#设置页) · [必须知道的限制](#必须知道的限制) · [更新日志](https://github.com/kongzhi1212/dsh-today-llm/releases) · [问题反馈](https://github.com/kongzhi1212/dsh-today-llm/issues)
+
+[![release](https://img.shields.io/github/v/release/kongzhi1212/dsh-today-llm?color=blue)](https://github.com/kongzhi1212/dsh-today-llm/releases)
+[![license](https://img.shields.io/github/license/kongzhi1212/dsh-today-llm?color=green)](https://github.com/kongzhi1212/dsh-today-llm/blob/main/LICENSE)
+[![ci](https://img.shields.io/github/actions/workflow/status/kongzhi1212/dsh-today-llm/ci.yml?label=tests)](https://github.com/kongzhi1212/dsh-today-llm/actions/workflows/ci.yml)
+[![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#使用前提)
+
+</div>
 
 > **这不是一个普通的 API 接入插件，请先读完这一段再安装。**
 >
 > 1. **它不是真正的模型通道。** Today 没有 OpenAI 兼容的补全接口，每个请求是发给 Today 自己的 agent 执行的。因此：回复**不是逐字流式**的；agent 自身的人格与长期记忆仍会塑造回答（提示词要求它忽略，但无法完全覆盖）；它**自己的工具无法关闭**，可能自行读文件或联网——任何「我做了某事」的回答都不能当作事实。
-> 2. **模型选择是账号级的。** Today 按账号保存一个当前模型，消息接口忽略任何按请求的模型字段。所以在 DSH 里选模型会改动你整个 Today 账号，包括手机上那一份。默认并发为 1，是为了避免两个不同模型的请求互相改写对方正在等待的会话。
+> 2. **模型选择是账号级的。** Today 按账号保存一个当前模型，消息接口忽略任何按请求的模型字段。所以在 DSH 里选模型会改动你整个 Today 账号，包括手机上那一份。插件默认会在每轮结束后恢复原模型，但这只是缓解。
 > 3. **真实消耗配额。** 插件不绕过计费，每次请求都按 Today 自己的规则扣你的额度。
 > 4. **依赖上游实现细节。** 它读取 Today 桌面端的加密凭据并调用其内部接口。上游一旦调整，插件可能失效。
 >

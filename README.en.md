@@ -1,6 +1,17 @@
+<div align="center">
+
 # Today models
 
-Connects the account already signed in by the **Today desktop app** to DeepSeek Harness as a model provider named `today`. Everything that account can use on Today comes through — **GLM, Kimi, Qwen, MiniMax, DeepSeek** and whatever else the catalog holds — with no extra signup or top-up.
+Use the account already signed in by the **Today desktop app** from DeepSeek Harness — one account, and **GLM, Kimi, Qwen, MiniMax, DeepSeek** become available, with per-model usage multipliers, a full settings page and diagnostics.
+
+[中文](README.md) · [Install](#install) · [Models](#which-models-you-get) · [Settings](#settings-page) · [Known limits](#known-limits) · [Changelog](https://github.com/kongzhi1212/dsh-today-llm/releases) · [Issues](https://github.com/kongzhi1212/dsh-today-llm/issues)
+
+[![release](https://img.shields.io/github/v/release/kongzhi1212/dsh-today-llm?color=blue)](https://github.com/kongzhi1212/dsh-today-llm/releases)
+[![license](https://img.shields.io/github/license/kongzhi1212/dsh-today-llm?color=green)](https://github.com/kongzhi1212/dsh-today-llm/blob/main/LICENSE)
+[![ci](https://img.shields.io/github/actions/workflow/status/kongzhi1212/dsh-today-llm/ci.yml?label=tests)](https://github.com/kongzhi1212/dsh-today-llm/actions/workflows/ci.yml)
+[![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#requirements)
+
+</div>
 
 > **This is not an ordinary API plugin. Read this before installing.**
 >
