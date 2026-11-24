@@ -36,14 +36,58 @@ The multiplier is Today's own rate, shown as-is. When the catalog changes the se
 
 ## Install
 
+Three routes; pick whichever fits.
+
+**① Windows, no command line**
+
+Download the `.tgz` and `install-windows.bat` from [Releases](https://github.com/kongzhi1212/dsh-today-llm/releases) into the same folder, then double-click the `.bat`. It locates the harness itself and installs into the `desktop` profile.
+
+**② Offline bundle, any platform**
+
 ```bash
-# Register this directory as a local bundle in DSH
-dsh plugin add /path/to/dsh-today-llm
+dsh plugin --profile desktop add ./dsh-today-llm-1.5.3.tgz
 ```
 
-Or point DSH's **Plugins → Add plugin** at this directory. Run `pnpm install` first to fetch the single dependency (`@deepseek-ai/schemastery`).
+**③ From source, for development**
+
+```bash
+pnpm install
+dsh plugin --profile desktop add /path/to/dsh-today-llm
+```
+
+Or point DSH's **Plugins → Add plugin** at this directory.
+
+> Copying the directory to another machine does not work: the plugin depends on `@deepseek-ai/schemastery` and needs a real `node_modules`. Use the `.tgz`, which installs its dependency too.
+>
+> This plugin is **not published to npm**, so `dsh plugin add dsh-today-llm` by name will not work — use the offline bundle or the source directory above.
 
 Requirement: the Today desktop app must be signed in on this machine. The plugin only ever reads the app's credential files, never writes them.
+
+### Troubleshooting
+
+One command reports credential state, deployment, token refresh, catalog and allowance:
+
+```bash
+node bin/doctor.js          # from the source directory
+```
+
+After a `.tgz` install the package lives under the profile, for example:
+
+```powershell
+node "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-today-llm\bin\doctor.js"
+```
+
+Exit code 0 means usable, 1 means something fatal. Read-only throughout.
+
+### Compatibility
+
+| DSH version | Status |
+| --- | --- |
+| `0.2.2-rc.5` | ✅ Verified here: settings page, diagnostics, event stream, model selection |
+| Other `0.2.x` | ⚠️ Untested; should work if no public API changed |
+| `0.3.x` | ⚠️ Untested |
+
+Only versions actually exercised are marked verified. An honest "untested" beats a tick mark nobody checked.
 
 ## Settings page
 

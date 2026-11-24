@@ -36,7 +36,7 @@
 
 ## 安装
 
-四条路，按你的情况挑一条。
+三条路，按你的情况挑一条。
 
 **① Windows 双击（不用命令行）**
 
@@ -45,16 +45,10 @@
 **② 离线包（任意平台）**
 
 ```bash
-dsh plugin --profile desktop add ./dsh-today-llm-1.5.0.tgz
+dsh plugin --profile desktop add ./dsh-today-llm-1.5.3.tgz
 ```
 
-**③ npm（发布后可用）**
-
-```bash
-dsh plugin --profile desktop add dsh-today-llm
-```
-
-**④ 从源码（开发用）**
+**③ 从源码（开发用）**
 
 ```bash
 pnpm install
@@ -64,15 +58,25 @@ dsh plugin --profile desktop add /path/to/dsh-today-llm
 或者用 DSH 的**插件 → 添加插件**指向本目录。
 
 > 直接把目录**复制**到另一台机器是不行的：插件依赖 `@deepseek-ai/schemastery`，需要一个真实的 `node_modules`。用 `.tgz`，包管理器会把依赖一起装好。
+>
+> 这个插件**没有发布到 npm**，所以不能 `dsh plugin add dsh-today-llm` 按名字安装，只能用上面的离线包或源码。
 
 前提：本机已登录 Today 桌面端。插件只读它的凭据文件，绝不写入。
 
 ### 排障
 
-一条命令看完凭据状态、服务区域、令牌刷新、模型目录、套餐用量：
+一条命令看完凭据状态、服务区域、令牌刷新、模型目录、套餐用量。
+
+**在源码目录里：**
 
 ```bash
-dsh-today-llm doctor      # 或 npx dsh-today-llm doctor / node bin/doctor.js
+node bin/doctor.js
+```
+
+**在已安装的 profile 里**（`.tgz` 安装后，位置随 profile 名而变）：
+
+```powershell
+node "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-today-llm\bin\doctor.js"
 ```
 
 退出码 0 表示可用，1 表示有致命问题。它只做只读调用，不会改动任何东西。

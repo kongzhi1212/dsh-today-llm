@@ -59,9 +59,10 @@ jobs:
 
             **Check a broken install:**
             ```
-            npx dsh-today-llm doctor
+            node "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-today-llm\bin\doctor.js"
             ```
 
-            Requires the Today desktop app to be signed in on the same machine. Read
-            the "read this first" section of the README before installing: this is not
-            an ordinary API plugin.
+            This plugin is not published to npm, so it cannot be installed by
+            package name. Requires the Today desktop app to be signed in on the
+            same machine. Read the "read this first" section of the README before
+            installing: this is not an ordinary API plugin.
